@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+.env
+
+# NASA source documents — obtain separately, do not commit
+data/raw_pdfs/
+
+# Generated at runtime — do not commit
+logs/audit.jsonl
+data/index_status.json
+
+# PageIndex-generated tree indexes (reproduced by running the indexer)
+indexes/
+
+# OS
+.DS_Store
+Thumbs.db

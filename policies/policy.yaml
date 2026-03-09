@@ -1,0 +1,40 @@
+policy_version: "0.1.0"
+system_name: "procedural-recall-assistant"
+
+llm:
+  provider: "ollama"
+  base_url: "http://localhost:11434"
+  model: "llama3.1:8b-instruct-q8_0"
+  temperature: 0.0
+  timeout_seconds: 180
+
+retrieval:
+  tool: "pageindexai"
+  top_k: 6
+  min_score: 0.25
+  require_evidence_for:
+    - procedural
+    - safety_critical
+  max_total_chars_evidence: 18000
+
+routing:
+  modes:
+    informational: "explain_only"
+    procedural: "checklist_pointer"
+    safety_critical: "escalation"
+    prohibited: "refusal"
+  fail_safe_on_low_confidence: true
+  min_classifier_confidence: 0.70
+
+output_constraints:
+  block_if_contains:
+    - "(?i)step\\s*\\d+"
+    - "(?m)^\\s*\\d+\\."
+    - "(?i)\\bpress\\b|\\bturn\\b|\\binject\\b|\\badminister\\b|\\bremove\\b|\\bdisconnect\\b|\\bopen\\b|\\bclose\\b"
+  require_inline_citation_pattern: "\\(Doc:[^)]+,\\s*Page:\\s*\\d+\\)"
+  citation_must_be_from_retrieved_pages: true
+  max_answer_chars: 2400
+
+audit:
+  enabled: true
+  log_path: "logs/audit.jsonl"

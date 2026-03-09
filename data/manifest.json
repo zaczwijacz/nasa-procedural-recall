@@ -1,0 +1,22 @@
+{
+  "documents": [
+    {
+      "id": "flight-procedures-handbook",
+      "filename": "JSC-11542 - Flight Procedures Handbook Rev E 200504.pdf",
+      "index":    "JSC-11542 - Flight Procedures Handbook Rev E 200504_structure.json",
+      "description": "NASA JSC Flight Procedures Handbook Rev E (2005) — covers standard and contingency flight procedures for shuttle operations."
+    },
+    {
+      "id": "iss-medical-emergency",
+      "filename": "NASA-ISSmedicalEmergManual_2016.pdf",
+      "index":    "NASA-ISSmedicalEmergManual_2016_structure.json",
+      "description": "NASA ISS Emergency Medical Procedures Manual (2016) — covers crew medical emergencies, trauma, and pharmaceutical protocols aboard the ISS."
+    },
+    {
+      "id": "shuttle-flight-rules",
+      "filename": "Space Shuttle Operational Flight Rules Volume A - All Flights 20020620 fr_generic.pdf",
+      "index":    "Space Shuttle Operational Flight Rules Volume A - All Flights 20020620 fr_generic_structure.json",
+      "description": "Space Shuttle Operational Flight Rules Volume A (2002) — authoritative flight rule constraints for all shuttle missions."
+    }
+  ]
+}
