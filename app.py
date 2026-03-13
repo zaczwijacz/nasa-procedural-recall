@@ -223,7 +223,7 @@ def render_result(msg: dict) -> None:
 # TAB 1 — Documents
 # ===========================================================================
 
-tab_docs, tab_chat, tab_audit = st.tabs(["📚 Documents", "💬 Query", "📋 Audit Log"])
+tab_docs, tab_chat, tab_audit, tab_tree = st.tabs(["📚 Documents", "💬 Query", "📋 Audit Log", "🌲 Decision Tree"])
 
 with tab_docs:
     st.title("Document Library")
@@ -463,3 +463,163 @@ with tab_audit:
                         )
                 else:
                     st.caption("_None_")
+
+
+# ===========================================================================
+# TAB 4 — Decision Tree
+# ===========================================================================
+
+def _build_pipeline_dot(highlight: dict | None = None) -> str:
+    """
+    Build a Graphviz DOT string for the query pipeline.
+    If highlight is provided (from an audit log entry), the nodes along the
+    actual path taken are outlined in bright white to show the live trace.
+    """
+    # Determine which path the last query took
+    h = highlight or {}
+    qtype        = h.get("query_type", "")
+    failsafe     = h.get("failsafe_triggered", False)
+    failsafe_why = h.get("failsafe_reason", "")
+    has_pages    = bool(h.get("retrieved_pages"))
+    is_prohibited = qtype == "prohibited"
+
+    def hl(node: str) -> str:
+        """Return extra attributes if this node is on the highlighted path."""
+        if not h:
+            return ""
+        active_nodes: set[str] = {"query", "classify"}
+        if is_prohibited:
+            active_nodes |= {"prohibited", "audit"}
+        else:
+            active_nodes.add("retrieve")
+            if not has_pages or failsafe_why == "insufficient_evidence":
+                active_nodes |= {"failsafe_evidence", "audit"}
+            else:
+                active_nodes.add("generate")
+                active_nodes.add("scan")
+                if failsafe_why == "safety_scan_blocked":
+                    active_nodes |= {"failsafe_scan", "audit"}
+                else:
+                    active_nodes |= {"response", "audit"}
+        if node in active_nodes:
+            return ', penwidth=3, color="#FFFFFF"'
+        return ""
+
+    # Classification label with actual type if known
+    classify_label = "Stage 1 — LLM Classification\\n(Qwen2.5:7b-instruct)"
+    if qtype:
+        classify_label += f"\\nLast query: {qtype}"
+
+    dot = f"""
+digraph pipeline {{
+    rankdir=TB
+    bgcolor="#0e1117"
+    node [fontname="Arial", fontsize=12, margin="0.3,0.2"]
+    edge [fontcolor="#aaaaaa", fontsize=10, color="#555555"]
+
+    query [label="User Query", shape=parallelogram,
+           style="filled,rounded", fillcolor="#1a4a8a", fontcolor="white"{hl("query")}]
+
+    classify [label="{classify_label}",
+              style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("classify")}]
+
+    prohibited [label="BLOCKED\\nProhibited query\\nNo retrieval performed",
+                style="filled,rounded", fillcolor="#8b0000", fontcolor="white"{hl("prohibited")}]
+
+    retrieve [label="Stage 2 — Document Retrieval\\nStop-word filter · Synonym expansion\\nKeyword scoring · Relative threshold",
+              style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("retrieve")}]
+
+    failsafe_evidence [label="FAIL-SAFE\\nInsufficient evidence\\nEscalate to ground support",
+                       style="filled,rounded", fillcolor="#8b4500", fontcolor="white"{hl("failsafe_evidence")}]
+
+    generate [label="Stage 3 — Answer Generation\\n(Qwen2.5:7b-instruct)\\nEvidence-only · Temp=0",
+              style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("generate")}]
+
+    scan [label="Stage 4 — Safety Scan\\nCitation check · Length check\\nFailsafe detection",
+          style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("scan")}]
+
+    failsafe_scan [label="FAIL-SAFE\\nOutput blocked\\nEscalate to ground support",
+                   style="filled,rounded", fillcolor="#8b4500", fontcolor="white"{hl("failsafe_scan")}]
+
+    response [label="Final Response\\nShown to crew member",
+              shape=parallelogram, style="filled,rounded",
+              fillcolor="#1a4a8a", fontcolor="white"{hl("response")}]
+
+    audit [label="Stage 5 — Audit Log\\nAll decisions recorded\\nTimestamped · SHA-256 prompt hash",
+           style="filled,rounded", fillcolor="#4a1a8a", fontcolor="white"{hl("audit")}]
+
+    query     -> classify
+    classify  -> prohibited       [label="prohibited"]
+    classify  -> retrieve         [label="safety_critical / procedural / informational"]
+    retrieve  -> failsafe_evidence [label="no evidence"]
+    retrieve  -> generate          [label="evidence found"]
+    generate  -> scan
+    scan      -> failsafe_scan    [label="blocked"]
+    scan      -> response         [label="passed"]
+
+    prohibited       -> audit
+    failsafe_evidence -> audit
+    failsafe_scan    -> audit
+    response         -> audit
+}}
+"""
+    return dot
+
+
+with tab_tree:
+    st.title("Pipeline Decision Tree")
+    st.caption(
+        "Every query passes through five stages. "
+        "The highlighted path shows the route taken by the most recent query."
+    )
+
+    # Load last audit event for live trace
+    last_event = None
+    if AUDIT_PATH.exists() and AUDIT_PATH.stat().st_size > 0:
+        for line in reversed(AUDIT_PATH.read_text(encoding="utf-8").strip().splitlines()[-50:]):
+            try:
+                last_event = json.loads(line)
+                break
+            except Exception:
+                pass
+
+    col_graph, col_info = st.columns([3, 1])
+
+    with col_graph:
+        st.graphviz_chart(_build_pipeline_dot(last_event), use_container_width=True)
+
+    with col_info:
+        st.markdown("#### Stage Summary")
+        st.markdown("""
+**🔵 Stage 1 — Classify**
+LLM reads the query and routes it to one of four modes. Prohibited queries are blocked immediately.
+
+**🟢 Stage 2 — Retrieve**
+Searches all indexed manuals using keyword scoring. If no relevant pages are found, escalates without calling the LLM.
+
+**🟢 Stage 3 — Generate**
+Qwen2.5 synthesises an answer using ONLY the retrieved evidence pages. Temperature set to 0 for determinism.
+
+**🟢 Stage 4 — Scan**
+Checks the response for citation validity and length limits. Blocks if violated.
+
+**🟣 Stage 5 — Audit**
+All decisions, raw LLM output, and source pages are written to the immutable JSONL audit log.
+""")
+
+        if last_event:
+            st.divider()
+            st.markdown("#### Last Query Trace")
+            qtype    = last_event.get("query_type", "—")
+            fail     = last_event.get("failsafe_triggered", False)
+            reason   = last_event.get("failsafe_reason", "")
+            n_pages  = len(last_event.get("retrieved_pages", []))
+            dur      = last_event.get("duration_ms", 0)
+            icon     = {"safety_critical": "🔴", "procedural": "🟡",
+                        "informational": "🟢", "prohibited": "⛔"}.get(qtype, "⚪")
+
+            st.caption(f"**Query:** {last_event.get('query','')[:60]}…")
+            st.caption(f"{icon} **Type:** {qtype}")
+            st.caption(f"**Pages found:** {n_pages}")
+            st.caption(f"**Outcome:** {'⚠️ Fail-safe — ' + reason if fail else '✅ Answer returned'}")
+            st.caption(f"**Duration:** {dur} ms")
