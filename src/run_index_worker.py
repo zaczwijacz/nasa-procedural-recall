@@ -20,7 +20,7 @@ import time
 from pathlib import Path
 
 ROOT          = Path(__file__).parent.parent.resolve()
-PAGEINDEX_DIR = Path(os.getenv("PAGEINDEX_DIR", r"C:\Users\zaczw\Documents\PageIndex"))
+PAGEINDEX_DIR = Path(os.getenv("PAGEINDEX_DIR", r"C:\Users\ZacMa\Documents\PageIndex"))
 STATUS_FILE   = ROOT / "data" / "index_status.json"
 INDEX_DIR     = ROOT / "indexes"
 
@@ -76,11 +76,13 @@ def main() -> None:
             [
                 sys.executable,
                 str(PAGEINDEX_DIR / "run_pageindex.py"),
-                "--pdf_path",       str(pdf_path),
-                "--toc-check-pages", "3",
+                "--pdf_path",           str(pdf_path),
+                "--toc-check-pages",    "3",
+                "--model",              "qwen2.5-10k",
+                "--max-pages-per-node", "3",
             ],
             cwd=str(PAGEINDEX_DIR),
-            timeout=3600,   # 1 h hard limit
+            timeout=7200,   # 2 h hard limit for large documents
         )
 
         if proc.returncode != 0:

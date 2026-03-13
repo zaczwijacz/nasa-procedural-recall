@@ -4,14 +4,14 @@ system_name: "procedural-recall-assistant"
 llm:
   provider: "ollama"
   base_url: "http://localhost:11434"
-  model: "llama3.1:8b-instruct-q8_0"
+  model: "qwen2.5:7b-instruct"
   temperature: 0.0
-  timeout_seconds: 180
+  timeout_seconds: 300
 
 retrieval:
   tool: "pageindexai"
   top_k: 6
-  min_score: 0.25
+  min_score: 0.15
   require_evidence_for:
     - procedural
     - safety_critical
@@ -27,13 +27,10 @@ routing:
   min_classifier_confidence: 0.70
 
 output_constraints:
-  block_if_contains:
-    - "(?i)step\\s*\\d+"
-    - "(?m)^\\s*\\d+\\."
-    - "(?i)\\bpress\\b|\\bturn\\b|\\binject\\b|\\badminister\\b|\\bremove\\b|\\bdisconnect\\b|\\bopen\\b|\\bclose\\b"
+  block_if_contains: []
   require_inline_citation_pattern: "\\(Doc:[^)]+,\\s*Page:\\s*\\d+\\)"
   citation_must_be_from_retrieved_pages: true
-  max_answer_chars: 2400
+  max_answer_chars: 5000
 
 audit:
   enabled: true

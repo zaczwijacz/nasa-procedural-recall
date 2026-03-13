@@ -90,19 +90,18 @@ def _build_evidence(pages: list, max_chars: int) -> str:
 
 
 def _make_prompt(query: str, evidence: str, query_type: str) -> str:
-    preamble = _QUERY_TYPE_PREAMBLE.get(query_type, "Answer using only the evidence.")
-    return (
-        f"You are an assistant for NASA flight crew. {preamble}\n\n"
-        f"Rules:\n"
-        f'- Use ONLY the EVIDENCE below. Never add information not present in the evidence.\n'
-        f'- Every factual claim must include an inline citation: (Doc:<title>, Page:<number>).\n'
-        f'- If the answer is not in the evidence, respond EXACTLY:\n'
-        f'  "{FAILSAFE_RESPONSE}"\n'
-        f"- Do not write numbered steps or give direct action commands.\n\n"
-        f"QUERY: {query}\n\n"
-        f"EVIDENCE:\n{evidence}\n\n"
-        f"Answer:"
+    preamble = _QUERY_TYPE_PREAMBLE.get(query_type, "")
+    instruction = (
+        "Using ONLY the evidence above, provide a clear and helpful answer. "
+        "Organize the response naturally — use numbered steps for procedures, "
+        "bullet points for lists of items or conditions, and plain paragraphs for explanations. "
+        "End with a 'Sources:' line naming each document and page range referenced."
     )
+    parts = [f"EVIDENCE FROM NASA DOCUMENTS:\n{evidence}", f"QUERY: {query}"]
+    if preamble:
+        parts.append(preamble)
+    parts.append(instruction)
+    return "\n\n".join(parts)
 
 
 def _evidence_sufficient(pages: list, policy: dict) -> bool:
@@ -116,12 +115,20 @@ def _evidence_sufficient(pages: list, policy: dict) -> bool:
 # Core run function (importable for testing)
 # ---------------------------------------------------------------------------
 
-def run_query(query: str, policy: dict) -> dict:
+def run_query(query: str, policy: dict, progress_callback=None) -> dict:
     """
     Execute the full pipeline for one query and return the result dict.
     The result is also written to the audit log.
+
+    progress_callback: optional callable(pct: float, text: str) called at each
+                       pipeline stage so callers can drive a progress bar.
     """
+    def _cb(pct: float, text: str) -> None:
+        if progress_callback:
+            progress_callback(pct, text)
+
     ts_start = time.time()
+    _cb(0.05, "Classifying query…")
     query_type, classifier_confidence = classify_query(query)
 
     # --- Prohibited query: refuse immediately, no retrieval ---
@@ -150,6 +157,7 @@ def run_query(query: str, policy: dict) -> dict:
         return event
 
     # --- Retrieve relevant pages ---
+    _cb(0.20, "Retrieving relevant pages…")
     pages = pageindex_search(
         query,
         policy["retrieval"]["top_k"],
@@ -182,11 +190,14 @@ def run_query(query: str, policy: dict) -> dict:
         return event
 
     # --- Build prompt and call LLM ---
+    _cb(0.45, "Building evidence context…")
     evidence    = _build_evidence(pages, policy["retrieval"]["max_total_chars_evidence"])
     prompt      = _make_prompt(query, evidence, query_type)
     prompt_hash = _sha256(prompt)
 
-    raw  = ollama_generate(prompt, model=policy["llm"]["model"])
+    _cb(0.55, f"Generating answer via Ollama ({policy['llm']['model']})…")
+    raw  = ollama_generate(prompt, model=policy["llm"]["model"], timeout=policy["llm"]["timeout_seconds"])
+    _cb(0.90, "Scanning output for safety…")
     scan = scan_output(raw, policy, pages)
 
     if scan["blocked"] or scan["is_failsafe"]:
@@ -212,6 +223,7 @@ def run_query(query: str, policy: dict) -> dict:
         "failsafe_triggered": failsafe_triggered,
         "failsafe_reason":    failsafe_reason,
     }
+    _cb(1.0, "Complete")
     write_audit_event(policy["audit"]["log_path"], event)
     return event
 

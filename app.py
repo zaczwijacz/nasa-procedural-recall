@@ -7,6 +7,7 @@ Tabs:
   📋 Audit Log  — full structured log of every query and safety decision
 """
 
+import datetime
 import json
 import os
 import subprocess
@@ -46,8 +47,40 @@ st.set_page_config(
 
 st.markdown("""
 <style>
+/* ── General layout ── */
 [data-testid="stChatMessageContent"] p { margin-bottom: 0.4rem; }
-.block-container { padding-top: 1.5rem; }
+.block-container { padding-top: 3.5rem; }
+header[data-testid="stHeader"] { display: none; }
+
+/* ── Tab bar ── */
+[data-testid="stTabs"] {
+    margin-bottom: 1.5rem;
+}
+[data-testid="stTabs"] > div:first-child {
+    gap: 0.5rem;
+    border-bottom: 2px solid #2e2e2e;
+    padding-bottom: 0;
+}
+[data-testid="stTabs"] button[role="tab"] {
+    font-size: 1rem !important;
+    font-weight: 600 !important;
+    padding: 0.65rem 1.4rem !important;
+    border-radius: 8px 8px 0 0 !important;
+    border: 1px solid transparent !important;
+    color: #aaaaaa !important;
+    background: transparent !important;
+    transition: color 0.2s, background 0.2s;
+}
+[data-testid="stTabs"] button[role="tab"]:hover {
+    color: #ffffff !important;
+    background: #1e1e1e !important;
+}
+[data-testid="stTabs"] button[role="tab"][aria-selected="true"] {
+    color: #ffffff !important;
+    background: #0e1117 !important;
+    border-color: #2e2e2e #2e2e2e #0e1117 !important;
+    border-bottom: 2px solid #D4262C !important;
+}
 </style>
 """, unsafe_allow_html=True)
 
@@ -146,9 +179,11 @@ def render_result(msg: dict) -> None:
         else:
             st.markdown(msg["answer"])
 
-        reasons = msg.get("scan", {}).get("reasons", [])
-        if reasons:
-            st.error(f"Safety flags: {', '.join(reasons)}", icon="🚨")
+        # Only show safety flags banner when the response was actually blocked.
+        if msg["failsafe"] and msg.get("failsafe_reason") == "safety_scan_blocked":
+            reasons = msg.get("scan", {}).get("reasons", [])
+            if reasons:
+                st.error(f"Safety flags: {', '.join(reasons)}", icon="🚨")
 
     with col_src:
         pages = msg.get("pages", [])
@@ -250,8 +285,15 @@ with tab_docs:
                 if st_str == "error":
                     st.caption((entry.get("error") or "")[:80])
                 elif st_str == "indexing":
-                    started = entry.get("started_at", "")[:16].replace("T", " ")
-                    st.caption(f"Started {started} UTC")
+                    started = entry.get("started_at", "")
+                    st.caption(f"Started {started[:16].replace('T', ' ')} UTC")
+                    try:
+                        start_dt = datetime.datetime.strptime(started, "%Y-%m-%dT%H:%M:%SZ")
+                        elapsed  = (datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None) - start_dt).total_seconds()
+                        est_pct  = min(elapsed / 1800.0, 0.95)  # 30 min estimate, cap at 95%
+                        st.progress(est_pct, text=f"~{int(est_pct * 100)}% (estimated)")
+                    except Exception:
+                        pass
 
             with c4:
                 if st_str == "indexing":
@@ -311,8 +353,13 @@ with tab_chat:
         with st.chat_message("user"):
             st.write(query)
 
-        with st.spinner("Searching manuals and generating answer…"):
-            result = run_query(query, get_policy())
+        pb = st.progress(0.0, text="Starting…")
+        result = run_query(
+            query,
+            get_policy(),
+            progress_callback=lambda pct, txt: pb.progress(pct, text=txt),
+        )
+        pb.empty()
 
         entry = {
             "query":          query,

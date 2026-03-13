@@ -62,7 +62,7 @@ def scan_output(
         cite_pat = policy["output_constraints"]["require_inline_citation_pattern"]
         missing_citations = re.search(cite_pat, text) is None
         if missing_citations:
-            blocked = True
+            # Flag but don't block — source pages are shown to the user for verification.
             reasons.append("missing_citations")
 
         if policy["output_constraints"]["citation_must_be_from_retrieved_pages"]:

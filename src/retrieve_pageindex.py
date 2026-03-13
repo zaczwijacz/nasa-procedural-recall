@@ -18,6 +18,55 @@ from pathlib import Path
 import pymupdf  # pip install pymupdf
 
 # ---------------------------------------------------------------------------
+# Query synonym expansion
+# Many NASA documents use abbreviations or domain-specific titles that won't
+# match natural-language queries. This table maps common query terms to the
+# abbreviations and section titles actually used in the indexed documents.
+# ---------------------------------------------------------------------------
+_SYNONYMS: dict[str, set[str]] = {
+    # Cardiac / resuscitation
+    "cardiac":      {"als", "aed", "cpr", "resuscitation", "defibrillat"},
+    "arrest":       {"als", "aed", "cpr", "resuscitation"},
+    "heart":        {"cardiac", "als", "aed"},
+    "cpr":          {"als", "cardiac", "resuscitation"},
+    "defibrillator":{"aed", "als"},
+    "resuscitate":  {"als", "cpr", "cardiac"},
+    # Airway / breathing
+    "choke":        {"choking", "airway", "obstruction"},
+    "choking":      {"airway", "obstruction"},
+    "breathe":      {"airway", "respiratory", "breathing"},
+    "breathing":    {"airway", "respiratory"},
+    "airway":       {"choking", "obstruction", "respiratory"},
+    # Toxic / exposure
+    "toxic":        {"exposure", "decontaminate", "contamination"},
+    "poison":       {"toxic", "exposure", "decontaminate"},
+    "exposure":     {"toxic", "decontaminate"},
+    # Seizure
+    "seizure":      {"convulsion", "epilepsy"},
+    "convulsion":   {"seizure"},
+    # Dental
+    "tooth":        {"dental", "filling"},
+    "teeth":        {"dental", "filling"},
+    # Flight / reentry
+    "reentry":      {"entry", "deorbit", "descent"},
+    "landing":      {"entry", "deorbit", "approach", "descent"},
+    "launch":       {"ascent", "liftoff", "abort"},
+}
+
+
+def _expand_tokens(tokens: list[str]) -> list[str]:
+    """Return query tokens expanded with domain synonyms."""
+    expanded = list(tokens)
+    seen = set(tokens)
+    for t in tokens:
+        for syn in _SYNONYMS.get(t, set()):
+            if syn not in seen:
+                expanded.append(syn)
+                seen.add(syn)
+    return expanded
+
+
+# ---------------------------------------------------------------------------
 # Paths (relative to this file's location: src/)
 # ---------------------------------------------------------------------------
 _SRC_DIR   = Path(__file__).parent
@@ -74,19 +123,25 @@ def _tokenize(text: str) -> list[str]:
     return re.findall(r"[a-z0-9]+", text.lower())
 
 
-def _score_node(node: dict, query_tokens: list[str]) -> float:
+def _score_node(node: dict, query_tokens: list[str], extra_tokens: set | None = None) -> float:
     """
     Normalized token-overlap score in [0, 1].
-    Score = (query tokens found in title+summary) / (total query tokens).
-    Nodes covering fewer pages get a small boost (more specific).
+    Primary score against title+summary; optional extra_tokens (page text) used
+    as a fallback at 50% weight so content-only matches can still surface.
     """
     if not query_tokens:
         return 0.0
 
-    text_tokens = set(_tokenize(node["title"] + " " + node["summary"]))
-    hits = sum(1 for t in query_tokens if t in text_tokens)
+    title_tokens = set(_tokenize(node["title"] + " " + node["summary"]))
+    title_hits = sum(1 for t in query_tokens if t in title_tokens)
+    title_score = title_hits / len(query_tokens)
 
-    base = hits / len(query_tokens)
+    text_score = 0.0
+    if extra_tokens:
+        text_hits = sum(1 for t in query_tokens if t in extra_tokens)
+        text_score = (text_hits / len(query_tokens)) * 0.5
+
+    base = max(title_score, text_score)
 
     # Slight specificity boost: prefer tighter page ranges.
     span = max(1, node["end_index"] - node["start_index"] + 1)
@@ -153,7 +208,7 @@ def pageindex_search(query: str, top_k: int, min_score: float) -> list[dict]:
     if not indexes:
         return []
 
-    query_tokens = _tokenize(query)
+    query_tokens = _expand_tokens(_tokenize(query))
 
     candidates = []
     for doc in indexes:
@@ -162,10 +217,12 @@ def pageindex_search(query: str, top_k: int, min_score: float) -> list[dict]:
         pdf_path  = _find_pdf(doc_name)
         nodes     = _flatten_nodes(doc.get("structure", []))
 
+        # Pass 1: score by title/summary only.
+        doc_candidates = []
         for node in nodes:
             score = _score_node(node, query_tokens)
             if score >= min_score:
-                candidates.append({
+                doc_candidates.append({
                     "score":     score,
                     "doc_name":  doc_name,
                     "doc_title": doc_title,
@@ -173,8 +230,37 @@ def pageindex_search(query: str, top_k: int, min_score: float) -> list[dict]:
                     "node":      node,
                 })
 
-    # Best scores first; cap at top_k.
+        # Pass 2: if title scoring found nothing for this doc, fall back to
+        # scoring against extracted page text (slower but catches content-only matches).
+        if not doc_candidates and pdf_path:
+            for node in nodes:
+                snippet = _extract_text(pdf_path, node["start_index"],
+                                        min(node["start_index"] + 2, node["end_index"]))
+                extra_tokens = set(_tokenize(snippet))
+                score = _score_node(node, query_tokens, extra_tokens)
+                if score >= min_score:
+                    doc_candidates.append({
+                        "score":     score,
+                        "doc_name":  doc_name,
+                        "doc_title": doc_title,
+                        "pdf_path":  pdf_path,
+                        "node":      node,
+                    })
+
+        candidates.extend(doc_candidates)
+
+    # Best scores first.
     candidates.sort(key=lambda c: c["score"], reverse=True)
+
+    # Relative threshold: discard results far below the best match.
+    # This automatically filters out off-topic documents without hardcoded
+    # domain rules — works for any number of indexed manuals.
+    # Example: if flight docs score 0.60 and medical docs score 0.10 for a
+    # flight query, cutoff = 0.60 * 0.45 = 0.27, so medical docs are dropped.
+    if candidates:
+        cutoff = candidates[0]["score"] * 0.45
+        candidates = [c for c in candidates if c["score"] >= cutoff]
+
     candidates = candidates[:top_k]
 
     results = []
