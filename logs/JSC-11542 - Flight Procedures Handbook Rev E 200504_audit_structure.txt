@@ -1,0 +1,161 @@
+warning: `VIRTUAL_ENV=c:\Users\ZacMa\AppData\Roaming\uv\python\cpython-3.14-windows-x86_64-none` does not match the project environment path `.venv` and will be ignored; use `--active` to target the active environment instead
+
+Auditing structure for: JSC-11542 - Flight Procedures Handbook Rev E 200504
+PDF: JSC-11542 - Flight Procedures Handbook Rev E 200504.pdf  (20 pages read for TOC context)
+Structure: 1687 chars  |  Source extract: 6000 chars
+
+============================================================
+  PASS 1 — Accuracy check (Accurate / Needs Revision / Missing)
+============================================================
+- **Accurate**
+  - Preface (pp.1-9)
+
+- **Needs Revision**
+  - INTRODUCTION (pp.9-15)
+    - **Corrected Label:** 1.1 INTRODUCTION (pp.9-15)
+    - **Corrected Parent-Child Placement:** Under Preface
+    - **Explanation:** The document starts with an Introduction section, which should be labeled as 1.1 INTRODUCTION.
+  - ENTRY FLIGHT DESCRIPTION (pp.15-19)
+    - **Corrected Label:** 2.1 ENTRY FLIGHT DESCRIPTION (pp.15-19)
+    - **Corrected Parent-Child Placement:** Under Preface
+    - **Explanation:** The document's section title is "ENTRY FLIGHT DESCRIPTION," which should be labeled as 2.1 ENTRY FLIGHT DESCRIPTION.
+  - TERMINAL AREA ENERGY MANAGEMENT (pp.20-30)
+    - **Corrected Label:** 2.4 TERMINAL AREA ENERGY MANAGEMENT (pp.20-30)
+    - **Corrected Parent-Child Placement:** Under Preface
+    - **Explanation:** The document's section title is "TERMINAL AREA ENERGY MANAGEMENT," which should be labeled as 2.4 TERMINAL AREA ENERGY MANAGEMENT.
+  - DEORBIT OPERATIONS (pp.30-39)
+    - **Corrected Label:** 4.1 DEORBIT OPERATIONS (pp.30-39)
+    - **Corrected Parent-Child Placement:** Under Preface
+    - **Explanation:** The document's section title is "DEORBIT OPERATIONS," which should be labeled as 4.1 DEORBIT OPERATIONS.
+  - ENTRY OPERATIONS (pp.106-114)
+    - **Corrected Label:** 2.5 ENTRY OPERATIONS (pp.106-114)
+    - **Corrected Parent-Child Placement:** Under Preface
+    - **Explanation:** The document's section title is "ENTRY OPERATIONS," which should be labeled as 2.5 ENTRY OPERATIONS.
+
+- **Missing Content**
+  - HSD Configuration Check (pp.39-50)
+  - Underburn Delta HP Calculation and Recovery Pre-bank (pp.50-62)
+  - Thermal Conditioning of Hydraulic Fluid (pp.62-70)
+  - Deorbit Burn Procedures (pp.70-75)
+  - OMS Engine Failure Procedures (pp.75-79)
+  - Engine Failure Followed by a Propellant Failure (pp.80-84)
+  - Propellant Failure Procedures (pp.84-90)
+  - RCS Deorbit Burn Procedures (pp.90-96)
+  - Mixed Crossfeed Deorbit Burn Procedures (pp.96-106)
+  - ENTRY TRAJ 1 to 5 Background Lines (pp.114-119)
+  - ENTRY TRAJ 1 to 5 Display Descriptions (pp.119-127)
+  - Phugoid Damper (pp.127-132)
+  - Range to Runway (pp.133-140)
+  - HORIZ SIT Display (pp.140-145)
+  - OVERRIDE Display (PFS and BFS) (pp.145-150)
+  - GPS STATUS Display (pp.150-157)
+  - Entry Flight Phase Display (pp.157-164)
+  - Entry Flight Phase Display (Continued) (pp.164-172)
+  - Entry Flight Phase Display (Continued) (pp.172-181)
+  - Entry Flight Phase Display (Continued) (pp.181-189)
+  - Entry Flight Phase Display (Continued) (pp.189-197)
+  - Entry Flight Phase Display (Continued) (pp.197-209)
+  - TAEM Interface and Guidance (pp.209-219)
+  - TAEM Guidance Subsonic Speedbrake Command (pp.219-227)
+  - TAEM Guidance Supersonic Speedbrake Command (pp.227-235)
+  - ADI Scaled Ay (pp.235-240)
+  - Oscillation and Bending Filter Issues (pp.240-242)
+  - High-Freq Osc or Surf/Jet Cycle (pp.243-254)
+
+These sections are not present in the provided JSON structure and should be added to ensure completeness.
+
+============================================================
+  PASS 2 — Structural audit (corrections + revised top-level)
+============================================================
+### 1. Overall Accuracy Judgment
+The current structure JSON has a high degree of accuracy, but there are some discrepancies and omissions that need to be addressed. The JSON structure is detailed and covers most of the sections mentioned in the PDF, but it lacks some subsections and has some mislabeling issues.
+
+### 2. Specific Corrections
+1. **Section Names and Subsection Names:**
+   - **Preface** should be renamed to **Introduction**.
+   - **INTRODUCTION** should be renamed to **Preface**.
+   - **ENTRY FLIGHT DESCRIPTION** should be renamed to **Entry Flight Description**.
+   - **TERMINAL AREA ENERGY MANAGEMENT** should be renamed to **Terminal Area Energy Management**.
+   - **DEORBIT OPERATIONS** should be renamed to **Deorbit Operations**.
+   - **ENTRY OPERATIONS** should be renamed to **Entry Operations**.
+   - **High-Freq Osc or Surf/Jet Cycle** should be renamed to **High-Frequency Oscillation or Surface/Jet Cycle**.
+
+2. **Omitted Sections:**
+   - **Assumptions, Guidelines, and Constraints** (Section 3) is missing.
+   - **Deorbit Burn Events** (4.1) is missing.
+   - **Deorbit Flight Rules** (4.2) is missing.
+   - **Deorbit Burn Cue Cards** (4.3) is missing.
+   - **2 ENG Deorbit Burn** (4.3.1) is missing.
+   - **1 ENG Deorbit Burn** (4.3.2) is missing.
+
+3. **Mislabeled Branches:**
+   - **HSD Configuration Check** should be under **Deorbit Operations**.
+   - **Underburn Delta HP Calculation and Recovery Pre-bank** should be under **Deorbit Operations**.
+   - **Thermal Conditioning of Hydraulic Fluid** should be under **Deorbit Operations**.
+   - **Deorbit Burn Procedures** should be under **Deorbit Operations**.
+   - **OMS Engine Failure Procedures** should be under **Deorbit Burn Procedures**.
+   - **Propellant Failure Procedures** should be under **Deorbit Burn Procedures**.
+   - **RCS Deorbit Burn Procedures** should be under **Deorbit Burn Procedures**.
+   - **Mixed Crossfeed Deorbit Burn Procedures** should be under **Deorbit Burn Procedures**.
+   - **Entry Trajectory 1 to 5 Background Lines** should be under **Entry Operations**.
+   - **Entry Trajectory 1 to 5 Display Descriptions** should be under **Entry Operations**.
+   - **Phugoid Damper** should be under **Entry Trajectory 1 to 5 Display Descriptions**.
+   - **Range to Runway** should be under **Entry Trajectory 1 to 5 Display Descriptions**.
+   - **HORIZ SIT Display** should be under **Entry Trajectory 1 to 5 Display Descriptions**.
+   - **OVERRIDE Display (PFS and BFS)** should be under **Entry Trajectory 1 to 5 Display Descriptions**.
+   - **GPS STATUS Display** should be under **Entry Trajectory 1 to 5 Display Descriptions**.
+   - **Entry Flight Phase Display** should be under **Entry Trajectory 1 to 5 Display Descriptions**.
+   - **TAEM Interface and Guidance** should be under **Entry Operations**.
+   - **TAEM Guidance Subsonic Speedbrake Command** should be under **TAEM Interface and Guidance**.
+   - **TAEM Guidance Supersonic Speedbrake Command** should be under **TAEM Interface and Guidance**.
+   - **ADI Scaled Ay** should be under **TAEM Interface and Guidance**.
+   - **Oscillation and Bending Filter Issues** should be under **TAEM Interface and Guidance**.
+
+4. **Uncertain Items:**
+   - The exact page numbers for some sections are missing or incorrect.
+   - The content of the **High-Freq Osc or Surf/Jet Cycle** section is not provided in the text extract.
+
+### 3. Recommended Revised Top-Level Structure
+1. Preface (pp.1-9)
+2. Introduction (pp.9-15)
+3. Entry Flight Description (pp.15-19)
+4. Terminal Area Energy Management (pp.20-30)
+5. Deorbit Operations (pp.30-39)
+   - HSD Configuration Check (pp.39-50)
+   - Underburn Delta HP Calculation and Recovery Pre-bank (pp.50-62)
+   - Thermal Conditioning of Hydraulic Fluid (pp.62-70)
+   - Deorbit Burn Procedures (pp.70-75)
+     - OMS Engine Failure Procedures (pp.75-79)
+     - Propellant Failure Procedures (pp.84-90)
+     - RCS Deorbit Burn Procedures (pp.90-96)
+     - Mixed Crossfeed Deorbit Burn Procedures (pp.96-106)
+6. Entry Operations (pp.106-114)
+   - Entry Trajectory 1 to 5 Background Lines (pp.114-119)
+     - Entry Trajectory 1 to 5 Display Descriptions (pp.119-127)
+       - Phugoid Damper (pp.127-132)
+       - Range to Runway (pp.133-140)
+       - HORIZ SIT Display (pp.140-145)
+       - OVERRIDE Display (PFS and BFS) (pp.145-150)
+       - GPS STATUS Display (pp.150-157)
+       - Entry Flight Phase Display (pp.157-164)
+       - Entry Flight Phase Display (Continued) (pp.164-172)
+       - Entry Flight Phase Display (Continued) (pp.172-181)
+       - Entry Flight Phase Display (Continued) (pp.181-189)
+       - Entry Flight Phase Display (Continued) (pp.189-197)
+       - Entry Flight Phase Display (Continued) (pp.197-209)
+   - TAEM Interface and Guidance (pp.209-219)
+     - TAEM Guidance Subsonic Speedbrake Command (pp.219-227)
+     - TAEM Guidance Supersonic Speedbrake Command (pp.227-235)
+     - ADI Scaled Ay (pp.235-240)
+     - Oscillation and Bending Filter Issues (pp.240-242)
+7. Assumptions, Guidelines, and Constraints (pp.243-254)
+8. High-Frequency Oscillation or Surface/Jet Cycle (pp.255-266)
+
+### 4. Uncertain Items
+- The exact page numbers for some sections are missing or incorrect.
+- The content of the **High-Freq Osc or Surf/Jet Cycle** section is not provided in the text extract.
+
+============================================================
+  Audit complete.
+============================================================
+

@@ -306,6 +306,13 @@ with tab_docs:
                         start_indexing(pdf)
                         st.rerun()
 
+            # Structure audit report (written by audit_structure.py after indexing)
+            audit_log_path = ROOT / "logs" / f"{pdf.stem}_audit_structure.txt"
+            if audit_log_path.exists():
+                with st.expander(f"🔍 Structure Audit Report — {pdf.stem[:40]}"):
+                    st.code(audit_log_path.read_text(encoding="utf-8", errors="replace"),
+                            language=None)
+
             st.divider()
 
 

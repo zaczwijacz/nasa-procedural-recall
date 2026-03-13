@@ -99,8 +99,31 @@ def main() -> None:
         INDEX_DIR.mkdir(parents=True, exist_ok=True)
         shutil.copy2(str(result_json), str(INDEX_DIR / result_json.name))
 
+        # Run the structure auditor so the LLM cross-checks the extracted TOC
+        # against the actual PDF content and logs any inaccuracies.
+        audit_log = ROOT / "logs" / f"{pdf_stem}_audit_structure.txt"
+        try:
+            audit_proc = subprocess.run(
+                [sys.executable, str(ROOT / "src" / "audit_structure.py"), pdf_stem],
+                cwd=str(ROOT),
+                capture_output=True,
+                text=True,
+                timeout=300,
+            )
+            audit_log.parent.mkdir(parents=True, exist_ok=True)
+            audit_log.write_text(
+                audit_proc.stdout + audit_proc.stderr, encoding="utf-8"
+            )
+        except Exception as audit_exc:
+            # Audit failure must never block the indexing from completing.
+            try:
+                audit_log.write_text(f"Audit error: {audit_exc}", encoding="utf-8")
+            except Exception:
+                pass
+
         _update(pdf_name,
                 status="ready",
+                audit_log=str(audit_log),
                 finished_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
 
     except subprocess.TimeoutExpired:
