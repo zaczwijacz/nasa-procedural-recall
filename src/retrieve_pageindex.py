@@ -82,6 +82,10 @@ _STOP_WORDS = {
     "crew", "member", "person", "people", "experiencing", "happening",
     "going", "into", "like", "just", "need", "want", "tell", "help",
     "please", "know", "think", "get", "make", "use", "see",
+    # NASA document header/footer tokens that appear on nearly every page
+    # and would cause false matches if used for scoring.
+    "iss", "med", "nasa", "page", "pages", "doc", "fin", "all",
+    "paper", "htv5", "spx",
 }
 
 
@@ -102,6 +106,14 @@ PDF_DIR    = _ROOT / "data" / "raw_pdfs"
 
 # How much page text to extract per matched section (chars).
 _MAX_CHARS_PER_SECTION = 3000
+
+# Full-PDF RAG fallback: pages with less text than this are skipped
+# (flowchart / image-only pages tend to be very sparse).
+_MIN_PAGE_TEXT_CHARS = 80
+
+# Score threshold below which the structured index is considered too weak,
+# triggering a full-page RAG scan of every PDF in PDF_DIR.
+_FULLTEXT_FALLBACK_THRESHOLD = 0.30
 
 
 # ---------------------------------------------------------------------------
@@ -217,6 +229,59 @@ def _extract_text(pdf_path: Path, start_page: int, end_page: int) -> str:
 # Public interface (matches the agent's retrieval contract)
 # ---------------------------------------------------------------------------
 
+def _fulltext_page_search(query_tokens: list[str], min_score: float) -> list[dict]:
+    """
+    Full-PDF RAG fallback: score every page of every PDF in PDF_DIR directly
+    against query_tokens.  Returns candidate dicts in the same format as Pass 1/2
+    so they can be merged and ranked with structured-index results.
+
+    This ensures that any section of any document is reachable even when the
+    pre-built structure JSON does not capture it (e.g. documents without a
+    machine-readable table of contents, or scanned PDFs where the indexer
+    extracted only a subset of sections).
+    """
+    candidates = []
+    for pdf_path in PDF_DIR.glob("*.pdf"):
+        doc_title = pdf_path.stem
+        try:
+            doc = pymupdf.open(str(pdf_path))
+        except Exception:
+            continue
+
+        for i in range(len(doc)):
+            page_text = doc[i].get_text().strip()
+            if len(page_text) < _MIN_PAGE_TEXT_CHARS:
+                continue  # skip image-only / near-empty pages
+
+            page_tokens = set(_tokenize(page_text))
+            hits = sum(1 for t in query_tokens if t in page_tokens)
+            if hits == 0:
+                continue
+            score = round(hits / len(query_tokens), 4)
+            if score < min_score:
+                continue
+
+            page_num = i + 1  # 1-indexed
+            candidates.append({
+                "score":     score,
+                "doc_name":  pdf_path.name,
+                "doc_title": doc_title,
+                "pdf_path":  pdf_path,
+                # Wrap the page as a synthetic node so the caller can extract text.
+                "node": {
+                    "title":       f"Page {page_num}",
+                    "summary":     "",
+                    "start_index": page_num,
+                    "end_index":   page_num,
+                    "node_id":     f"fulltext_{doc_title}_{page_num:04d}",
+                },
+            })
+
+        doc.close()
+
+    return candidates
+
+
 def pageindex_search(query: str, top_k: int, min_score: float) -> list[dict]:
     """
     Search all loaded indexes for the most relevant sections.
@@ -274,6 +339,26 @@ def pageindex_search(query: str, top_k: int, min_score: float) -> list[dict]:
                     })
 
         candidates.extend(doc_candidates)
+
+    # Pass 3 — Full-PDF RAG fallback.
+    # If no structured result scored above the fallback threshold, scan every
+    # page of every PDF directly.  This catches sections that were never added
+    # to any structure JSON (missing TOC entries, scanned-only pages in the
+    # index, documents without a machine-readable table of contents, etc.).
+    top_score = candidates[0]["score"] if candidates else 0.0
+    if top_score < _FULLTEXT_FALLBACK_THRESHOLD:
+        fulltext_candidates = _fulltext_page_search(query_tokens, min_score)
+        # De-duplicate: drop fulltext hits that overlap with structured results
+        # already in candidates (same doc + overlapping page range).
+        existing = {
+            (c["doc_name"], c["node"]["start_index"])
+            for c in candidates
+        }
+        for fc in fulltext_candidates:
+            key = (fc["doc_name"], fc["node"]["start_index"])
+            if key not in existing:
+                candidates.append(fc)
+                existing.add(key)
 
     # Best scores first.
     candidates.sort(key=lambda c: c["score"], reverse=True)
