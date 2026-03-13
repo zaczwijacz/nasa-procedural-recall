@@ -66,6 +66,32 @@ def _expand_tokens(tokens: list[str]) -> list[str]:
     return expanded
 
 
+# Common English words that carry no topical meaning and inflate the
+# token denominator, making real keyword matches score too low.
+_STOP_WORDS = {
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "could",
+    "should", "may", "might", "shall", "can", "i", "me", "my", "we", "our",
+    "you", "your", "he", "she", "it", "they", "them", "this", "that",
+    "what", "which", "who", "how", "when", "where", "why",
+    "to", "of", "in", "for", "on", "with", "at", "by", "from", "as",
+    "and", "but", "or", "if", "not", "no", "so", "then",
+    "there", "here", "up", "out", "about",
+    # Common conversational filler in natural-language queries
+    "someone", "something", "somebody", "anyone", "anything",
+    "crew", "member", "person", "people", "experiencing", "happening",
+    "going", "into", "like", "just", "need", "want", "tell", "help",
+    "please", "know", "think", "get", "make", "use", "see",
+}
+
+
+def _meaningful_tokens(tokens: list[str]) -> list[str]:
+    """Remove stop words so scoring is driven by topical keywords only."""
+    kept = [t for t in tokens if t not in _STOP_WORDS and len(t) > 2]
+    # Fall back to all tokens if filtering removes everything
+    return kept if kept else tokens
+
+
 # ---------------------------------------------------------------------------
 # Paths (relative to this file's location: src/)
 # ---------------------------------------------------------------------------
@@ -208,7 +234,7 @@ def pageindex_search(query: str, top_k: int, min_score: float) -> list[dict]:
     if not indexes:
         return []
 
-    query_tokens = _expand_tokens(_tokenize(query))
+    query_tokens = _meaningful_tokens(_expand_tokens(_tokenize(query)))
 
     candidates = []
     for doc in indexes:
