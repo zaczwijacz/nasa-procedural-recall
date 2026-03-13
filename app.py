@@ -123,21 +123,27 @@ def save_status(data: dict) -> None:
 
 
 def effective_status(pdf: Path, raw: dict) -> str:
-    """Index file on disk is ground truth — overrides stale status entries."""
+    """
+    Determine the current index status for a PDF.
+
+    Priority order:
+      1. If the status file says "indexing", trust it — an active run is in
+         progress and the old structure JSON on disk is stale.
+      2. If a structure JSON exists on disk, the document is ready.
+      3. Fall back to whatever the status file records (error / pending / etc.).
+    """
+    recorded = raw.get(pdf.name, {}).get("status", "pending")
+    if recorded == "indexing":
+        return "indexing"
     if (INDEX_DIR / f"{pdf.stem}_structure.json").exists():
         return "ready"
-    return raw.get(pdf.name, {}).get("status", "pending")
+    return recorded
 
 
 def start_indexing(pdf: Path) -> None:
-    worker = SRC_DIR / "run_index_worker.py"
-    flags  = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-    subprocess.Popen(
-        [sys.executable, str(worker), str(pdf)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        creationflags=flags,
-    )
+    # Write "indexing" status BEFORE spawning so that effective_status()
+    # returns "indexing" on the next rerun even though the old structure
+    # JSON still exists on disk.
     data = load_status()
     data[pdf.name] = {
         "status":      "indexing",
@@ -146,6 +152,15 @@ def start_indexing(pdf: Path) -> None:
         "error":       None,
     }
     save_status(data)
+
+    worker = SRC_DIR / "run_index_worker.py"
+    flags  = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+    subprocess.Popen(
+        [sys.executable, str(worker), str(pdf)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        creationflags=flags,
+    )
 
 
 def find_pdf(doc_title: str) -> Path | None:
