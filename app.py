@@ -223,7 +223,7 @@ def render_result(msg: dict) -> None:
 # TAB 1 — Documents
 # ===========================================================================
 
-tab_docs, tab_chat, tab_audit, tab_tree = st.tabs(["📚 Documents", "💬 Query", "📋 Audit Log", "🌲 Decision Tree"])
+tab_docs, tab_chat, tab_audit, tab_tree, tab_doctree = st.tabs(["📚 Documents", "💬 Query", "📋 Audit Log", "🌲 Decision Tree", "📑 Document Tree"])
 
 with tab_docs:
     st.title("Document Library")
@@ -623,3 +623,152 @@ All decisions, raw LLM output, and source pages are written to the immutable JSO
             st.caption(f"**Pages found:** {n_pages}")
             st.caption(f"**Outcome:** {'⚠️ Fail-safe — ' + reason if fail else '✅ Answer returned'}")
             st.caption(f"**Duration:** {dur} ms")
+
+
+# ===========================================================================
+# TAB 5 — Document Tree
+# ===========================================================================
+
+# Depth-based fill colours (dark theme friendly)
+_DEPTH_COLORS = [
+    "#1a4a8a",  # 0 — root (dark blue)
+    "#1a6b3a",  # 1 — top section (dark green)
+    "#5a3a8a",  # 2 — sub-section (purple)
+    "#7a5a1a",  # 3 — sub-sub-section (amber)
+    "#1a6a6a",  # 4 — deep (teal)
+]
+
+
+def _sanitize_dot(s: str) -> str:
+    """Escape characters that would break Graphviz DOT string literals."""
+    return s.replace('"', "'").replace("\\", "/").replace("\n", " ")
+
+
+def _build_doc_tree_dot(structure: list, doc_label: str) -> str:
+    """
+    Recursively build a Graphviz DOT string representing the indexed
+    section hierarchy of one document.
+
+    Each node shows the section title (truncated to 35 chars) and page range.
+    Colour encodes depth.  Layout is left-to-right so deep trees stay readable.
+    """
+    lines: list[str] = []
+    node_counter = [0]
+
+    def _add_node(node: dict, parent_id: str | None, depth: int) -> None:
+        nid = f"n{node_counter[0]}"
+        node_counter[0] += 1
+
+        title   = node.get("title", "")
+        start   = node.get("start_index", "?")
+        end     = node.get("end_index", start)
+        label   = _sanitize_dot(title[:35] + ("…" if len(title) > 35 else ""))
+        pages   = f"pp.{start}–{end}" if start != end else f"p.{start}"
+        color   = _DEPTH_COLORS[min(depth, len(_DEPTH_COLORS) - 1)]
+
+        lines.append(
+            f'    {nid} [label="{label}\\n{pages}", '
+            f'style="filled,rounded", fillcolor="{color}", fontcolor="white", '
+            f'fontname="Arial", fontsize=10, margin="0.2,0.15"]'
+        )
+        if parent_id is not None:
+            lines.append(f"    {parent_id} -> {nid} [color=\"#555555\"]")
+
+        for child in node.get("nodes", []):
+            _add_node(child, nid, depth + 1)
+
+    # Virtual root node for the document itself
+    root_id = "doc_root"
+    safe_label = _sanitize_dot(doc_label[:50])
+    lines.append(
+        f'    {root_id} [label="{safe_label}", shape=folder, '
+        f'style="filled", fillcolor="#2a2a5a", fontcolor="white", '
+        f'fontname="Arial Bold", fontsize=11, margin="0.3,0.2"]'
+    )
+
+    for top_node in structure:
+        _add_node(top_node, root_id, depth=1)
+
+    dot = (
+        "digraph doc_tree {\n"
+        "    rankdir=LR\n"
+        "    bgcolor=\"#0e1117\"\n"
+        "    node [shape=box]\n"
+        "    edge [arrowsize=0.6]\n"
+        + "\n".join(lines)
+        + "\n}"
+    )
+    return dot
+
+
+def _load_toc_indexes() -> list[dict]:
+    """
+    Return structure JSONs that have a meaningful TOC — defined as documents
+    whose structure was extracted by PageIndex from the document itself
+    (as opposed to manually curated flat lists).  We use a heuristic:
+    the tree must contain at least one node that itself has child nodes.
+    """
+    results = []
+    for path in INDEX_DIR.glob("*_structure.json"):
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        structure = data.get("structure", [])
+        # Check if any node has children → real nested TOC
+        def _has_children(nodes: list) -> bool:
+            for n in nodes:
+                if n.get("nodes"):
+                    return True
+                if _has_children(n.get("nodes", [])):
+                    return True
+            return False
+        if _has_children(structure):
+            results.append(data)
+    return results
+
+
+with tab_doctree:
+    st.title("Indexed Document Trees")
+    st.caption(
+        "Shows the section hierarchy extracted by PageIndex for documents "
+        "where a machine-readable Table of Contents was found.  "
+        "Flat lists (ISS Medical Manual, Computers Overview) are excluded "
+        "as they have no nested structure."
+    )
+
+    toc_indexes = _load_toc_indexes()
+
+    if not toc_indexes:
+        st.info("No documents with nested TOC structure found in the indexes/ directory.")
+    else:
+        doc_names = [Path(d["doc_name"]).stem for d in toc_indexes]
+        selected_name = st.selectbox("Select document", doc_names)
+
+        selected_data = next(
+            d for d in toc_indexes if Path(d["doc_name"]).stem == selected_name
+        )
+        structure = selected_data.get("structure", [])
+
+        # Count total nodes for info bar
+        def _count_nodes(nodes: list) -> int:
+            return sum(1 + _count_nodes(n.get("nodes", [])) for n in nodes)
+
+        total_nodes = _count_nodes(structure)
+        max_depth_val = [0]
+
+        def _max_depth(nodes: list, d: int = 0) -> None:
+            for n in nodes:
+                max_depth_val[0] = max(max_depth_val[0], d)
+                _max_depth(n.get("nodes", []), d + 1)
+
+        _max_depth(structure)
+
+        col_a, col_b, col_c = st.columns(3)
+        col_a.metric("Total sections", total_nodes)
+        col_b.metric("Tree depth", max_depth_val[0] + 1)
+        col_c.metric("Top-level sections", len(structure))
+
+        dot_src = _build_doc_tree_dot(structure, selected_name)
+        st.graphviz_chart(dot_src, use_container_width=True)
+
+        with st.expander("View raw structure JSON"):
+            st.json(structure)
