@@ -659,7 +659,7 @@ def _build_pipeline_dot(highlight: dict | None = None) -> str:
         return ""
 
     # Classification label with actual type if known
-    classify_label = "Stage 1 — LLM Classification\\n(Qwen2.5:7b-instruct)"
+    classify_label = "Stage 1 — LLM Classification\\nqwen2.5vl:7b"
     if qtype:
         classify_label += f"\\nLast query: {qtype}"
 
@@ -679,16 +679,16 @@ digraph pipeline {{
     prohibited [label="BLOCKED\\nProhibited query\\nNo retrieval performed",
                 style="filled,rounded", fillcolor="#8b0000", fontcolor="white"{hl("prohibited")}]
 
-    retrieve [label="Stage 2 — Document Retrieval\\nStop-word filter · Synonym expansion\\nKeyword scoring · Relative threshold",
+    retrieve [label="Stage 2 — Vision-RAG Retrieval\\nTier 0: Figure caption scan\\nTier 1: VLM tree search (qwen2.5vl:7b)\\nTier 2: Keyword + synonym expansion\\nTier 3: Full-page scan (fallback)\\nBM25 re-ranking",
               style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("retrieve")}]
 
     failsafe_evidence [label="FAIL-SAFE\\nInsufficient evidence\\nEscalate to ground support",
                        style="filled,rounded", fillcolor="#8b4500", fontcolor="white"{hl("failsafe_evidence")}]
 
-    generate [label="Stage 3 — Answer Generation\\n(Qwen2.5:7b-instruct)\\nEvidence-only · Temp=0",
+    generate [label="Stage 3 — Answer Generation\\nqwen2.5vl:7b · Text + page images\\nEvidence-only · Temp=0 · Inline (p.N) citations",
               style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("generate")}]
 
-    scan [label="Stage 4 — Safety Scan\\nCitation check · Length check\\nFailsafe detection",
+    scan [label="Stage 4 — Safety Scan\\nCitation hit check · Length check\\nFail-safe pattern detection",
           style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("scan")}]
 
     failsafe_scan [label="FAIL-SAFE\\nOutput blocked\\nEscalate to ground support",
@@ -698,22 +698,22 @@ digraph pipeline {{
               shape=parallelogram, style="filled,rounded",
               fillcolor="#1a4a8a", fontcolor="white"{hl("response")}]
 
-    audit [label="Stage 5 — Audit Log\\nAll decisions recorded\\nTimestamped · SHA-256 prompt hash",
+    audit [label="Stage 5 — Audit Log\\nQuery · retrieval_type · quality_score\\nTimestamped · SHA-256 prompt hash",
            style="filled,rounded", fillcolor="#4a1a8a", fontcolor="white"{hl("audit")}]
 
     query     -> classify
-    classify  -> prohibited       [label="prohibited"]
-    classify  -> retrieve         [label="safety_critical / procedural / informational"]
-    retrieve  -> failsafe_evidence [label="no evidence"]
+    classify  -> prohibited        [label="prohibited"]
+    classify  -> retrieve          [label="safety_critical / procedural / informational"]
+    retrieve  -> failsafe_evidence [label="score < min_score"]
     retrieve  -> generate          [label="evidence found"]
     generate  -> scan
-    scan      -> failsafe_scan    [label="blocked"]
-    scan      -> response         [label="passed"]
+    scan      -> failsafe_scan     [label="blocked"]
+    scan      -> response          [label="passed"]
 
-    prohibited       -> audit
+    prohibited        -> audit
     failsafe_evidence -> audit
-    failsafe_scan    -> audit
-    response         -> audit
+    failsafe_scan     -> audit
+    response          -> audit
 }}
 """
     return dot
@@ -745,19 +745,19 @@ with tab_tree:
         st.markdown("#### Stage Summary")
         st.markdown("""
 **🔵 Stage 1 — Classify**
-LLM reads the query and routes it to one of four modes. Prohibited queries are blocked immediately.
+qwen2.5vl:7b reads the query and routes it to one of four modes: safety\\_critical, procedural, informational, or prohibited. Prohibited queries are blocked immediately — no retrieval performed.
 
-**🟢 Stage 2 — Retrieve**
-Searches all indexed manuals using keyword scoring. If no relevant pages are found, escalates without calling the LLM.
+**🟢 Stage 2 — Vision-RAG Retrieve**
+Four-tier cascade: figure caption scan → VLM tree search (qwen2.5vl:7b scores each index node) → keyword + synonym expansion → full-page scan fallback. BM25 re-ranking demotes false-positive VLM hits. If no page meets min\\_score, escalates without calling the LLM.
 
 **🟢 Stage 3 — Generate**
-Qwen2.5 synthesises an answer using ONLY the retrieved evidence pages. Temperature set to 0 for determinism.
+qwen2.5vl:7b synthesises an answer using ONLY the retrieved evidence — text plus rendered page images (vision). Temperature 0 for determinism. Every numbered step gets an inline (p.N) citation.
 
 **🟢 Stage 4 — Scan**
-Checks the response for citation validity and length limits. Blocks if violated.
+Checks citations point to retrieved pages, enforces response length limit, and detects fail-safe patterns. Blocks if any check fails.
 
 **🟣 Stage 5 — Audit**
-All decisions, raw LLM output, and source pages are written to the immutable JSONL audit log.
+All decisions — query type, retrieval tier, quality scores, raw LLM output, safety scan result, and final response — are written to the immutable JSONL audit log with ISO timestamps and SHA-256 prompt hash.
 """)
 
         if last_event:
@@ -771,8 +771,16 @@ All decisions, raw LLM output, and source pages are written to the immutable JSO
             icon     = {"safety_critical": "🔴", "procedural": "🟡",
                         "informational": "🟢", "prohibited": "⛔"}.get(qtype, "⚪")
 
+            tier_label = {
+                "figure_caption": "Tier 0 — Figure caption",
+                "vlm_tree":       "Tier 1 — VLM tree search",
+                "keyword":        "Tier 2 — Keyword scoring",
+                "none":           "No evidence found",
+            }.get(last_event.get("retrieval_type", ""), last_event.get("retrieval_type", "—"))
+
             st.caption(f"**Query:** {last_event.get('query','')[:60]}…")
             st.caption(f"{icon} **Type:** {qtype}")
+            st.caption(f"**Retrieval tier:** {tier_label}")
             st.caption(f"**Pages found:** {n_pages}")
             st.caption(f"**Outcome:** {'⚠️ Fail-safe — ' + reason if fail else '✅ Answer returned'}")
             st.caption(f"**Duration:** {dur} ms")
