@@ -225,5 +225,5 @@ Inference is powered by **[Qwen2.5-VL](https://github.com/QwenLM/Qwen2.5-VL)** f
 
 | GitHub | Role |
 |---|---|
-| [@zaczwijacz](https://github.com/zaczwijacz) | Project lead, system architecture, pipeline development |
-| [@mitulj9](https://github.com/mitulj9) | Contributor |
+| [@zaczwijacz](https://github.com/zaczwijacz) | Project co-lead, system architecture, pipeline development |
+| [@mitulj9](https://github.com/mitulj9) | Project co-lead, system architecture, pipeline development |
