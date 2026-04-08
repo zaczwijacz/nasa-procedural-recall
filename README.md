@@ -1,6 +1,6 @@
 # NASA Procedural Recall Assistant
 
-An offline RAG (Retrieval-Augmented Generation) system for querying NASA flight crew procedural manuals. Designed for astronauts and ground support to retrieve specific information from flight procedures, medical emergency protocols, and operational flight rules — without reading entire documents.
+A locally-hosted **Vision-RAG** system for querying NASA flight crew procedural manuals. Designed for astronauts and ground support to retrieve specific information from flight procedures, medical emergency protocols, and operational flight rules — without reading entire documents.
 
 **Fully local and offline. No cloud required.**
 
@@ -8,13 +8,16 @@ An offline RAG (Retrieval-Augmented Generation) system for querying NASA flight 
 
 ## Features
 
-- **Document indexing** — upload any PDF manual and build a searchable tree index via PageIndex + Ollama
-- **Local LLM** — powered by **Qwen2.5 7B Instruct** running entirely on-device via Ollama
-- **Smart retrieval** — keyword overlap scoring with query synonym expansion and relative score thresholding to route each query to the most relevant manual automatically
-- **Natural language answers** — responses are synthesized in clear, structured language (numbered steps for procedures, bullets for checklists) grounded solely in the indexed documents
-- **Safety wrappers** — citation enforcement, length limits, and a fail-safe escalation gate
-- **Audit log** — every query, retrieval result, safety decision, and final response is written to `logs/audit.jsonl`
-- **Streamlit UI** — upload PDFs, trigger indexing, query, and view source PDF pages side-by-side with answers
+- **Vision-RAG pipeline** — four-tier retrieval cascade: figure caption scan → VLM tree search → keyword scoring → full-page scan, each grounded in indexed document structure
+- **Vision-Language Model** — powered by **Qwen2.5-VL 7B** (`qwen2.5vl:7b`) running entirely on-device via Ollama; handles both text and embedded page images
+- **BM25 re-ranking** — post-VLM re-ranking demotes false-positive retrievals before generation
+- **Synonym expansion** — hardcoded medical/aerospace synonym clusters merged with a user-editable `data/synonyms.yaml` overlay at import time
+- **Query classification** — routes each query to `safety_critical`, `procedural`, `informational`, or `prohibited` before retrieval, adjusting response rigour accordingly
+- **Inline citations** — every numbered step in a response carries a `(p.N)` citation that hyperlinks directly to the PDF page in the browser
+- **Quality scoring** — four independent per-query scores (Retrieval, Answer, Completeness, Coverage) displayed alongside every response
+- **Safety wrappers** — fail-safe escalation gate, citation enforcement, and length limits; all decisions are logged
+- **Audit log** — every query, retrieval result, safety decision, retrieval tier, and final response is written to `logs/audit.jsonl` as structured JSONL
+- **Streamlit UI** — upload PDFs, trigger indexing, query with inline page links, toggle dark/light theme, and export audit records
 
 ---
 
@@ -22,29 +25,48 @@ An offline RAG (Retrieval-Augmented Generation) system for querying NASA flight 
 
 ```
 User Query
-  → retrieve_pageindex.py   synonym expansion → keyword scoring over all indexed manuals
-                            relative score threshold filters off-topic documents
-  → Fail-safe gate          if no evidence meets confidence threshold → escalate without LLM
-  → llm_ollama.py           Qwen2.5:7b-instruct via Ollama /api/chat
-                            strict system prompt: evidence-only, natural formatting, Sources line
-  → safety_scan.py          citation checks · length check
-  → audit.py                JSONL append to logs/audit.jsonl
+  ├─ classify_query.py      LLM classifier → safety_critical / procedural / informational / prohibited
+  │
+  └─ retrieve_pageindex.py  Four-tier Vision-RAG cascade:
+       Tier 0  Figure caption scan   — deterministic match on "Figure N" / "Table N" patterns
+       Tier 1  VLM tree search       — qwen2.5vl:7b scores each index node summary against the query
+       Tier 2  Keyword scoring       — synonym-expanded token overlap over all node summaries
+       Tier 3  Full-page scan        — fallback: raw text search across all indexed page content
+               ↓
+       BM25 re-ranking               — normalised BM25 score penalises false-positive VLM hits
+               ↓
+  ├─ Fail-safe gate          if no page meets min_score → escalation response, no LLM call
+  │
+  ├─ llm_ollama.py           qwen2.5vl:7b via Ollama /api/chat
+  │                          page images rendered at 96 DPI and attached as vision payload
+  │                          evidence-only system prompt with inline (p.N) citation instruction
+  │
+  ├─ safety_scan.py          citation hit check · length check · fail-safe pattern detection
+  │
+  └─ audit.py                JSONL append → logs/audit.jsonl
+                             fields: query, query_type, retrieved_pages, retrieval_type,
+                                     llm_prompt_sha256, safety_scan, final_response,
+                                     quality_score, duration_ms, ISO timestamps
 ```
 
 ---
 
 ## Models
 
-| Purpose | Model | Notes |
-|---|---|---|
-| Query answering | `qwen2.5:7b-instruct` | Ollama default model |
-| PDF indexing | `qwen2.5-10k` | Custom Modelfile: `num_ctx 10240, num_predict 8192` |
+| Purpose | Model | Backend | Notes |
+|---|---|---|---|
+| Query classification | `qwen2.5vl:7b` | Ollama | Classifies intent before retrieval |
+| VLM tree search (Tier 1) | `qwen2.5vl:7b` | Ollama | Scores index node summaries against query |
+| Answer generation | `qwen2.5vl:7b` | Ollama | Text + page image (vision) input |
+| PDF indexing | `qwen2.5vl-10k` | Ollama | Custom Modelfile: `num_ctx 10240, num_predict 8192` |
 
-### Creating the indexing model
+All inference uses a single unified model: **Qwen2.5-VL 7B Instruct** — a multimodal vision-language model from Alibaba DAMO Academy that handles text, structured JSON output, and page-image understanding in one pass.
+
+### Creating the high-context indexing model
 
 ```bash
-ollama create qwen2.5-10k -f - <<'EOF'
-FROM qwen2.5:7b-instruct
+ollama create qwen2.5vl-10k -f - <<'EOF'
+FROM qwen2.5vl:7b
 PARAMETER num_ctx 10240
 PARAMETER num_predict 8192
 EOF
@@ -55,8 +77,8 @@ EOF
 ## Requirements
 
 - Python 3.11+
-- [Ollama](https://ollama.com/) running locally with `qwen2.5:7b-instruct` pulled
-- [PageIndex](https://github.com/VectifyAI/PageIndex) cloned at `C:/Users/<you>/Documents/PageIndex/` (for indexing only)
+- [Ollama](https://ollama.com/) running locally with `qwen2.5vl:7b` pulled
+- [PageIndex](https://github.com/VectifyAI/PageIndex) — see Credits below
 
 ---
 
@@ -64,15 +86,20 @@ EOF
 
 ```bash
 # 1. Install dependencies
-pip install -r requirements.txt
+pip install uv
+uv sync
 
-# 2. Pull the LLM model in Ollama
-ollama pull qwen2.5:7b-instruct
+# 2. Pull the vision-language model
+ollama pull qwen2.5vl:7b
 
-# 3. Create the high-context indexing model
-ollama create qwen2.5-10k -f Modelfile
+# 3. Create the high-context indexing variant
+ollama create qwen2.5vl-10k -f - <<'EOF'
+FROM qwen2.5vl:7b
+PARAMETER num_ctx 10240
+PARAMETER num_predict 8192
+EOF
 
-# 4. Clone PageIndex (for the one-time indexing step)
+# 4. Clone PageIndex (required for document indexing)
 git clone https://github.com/VectifyAI/PageIndex C:/Users/<you>/Documents/PageIndex
 pip install -r C:/Users/<you>/Documents/PageIndex/requirements.txt
 
@@ -90,9 +117,10 @@ uv run streamlit run app.py
 uv run streamlit run app.py
 ```
 
-- **Documents** tab — upload a PDF and click **Build Index**. Indexing runs in the background and takes 10–60 min per manual depending on size.
-- **Query** tab — type a question in natural language. The answer appears with source PDF pages rendered beside it.
-- **Audit Log** tab — full record of every session, exportable as JSONL.
+- **Documents** tab — upload a PDF and click **Build Index**. Indexing runs as a background subprocess and takes 10–60 min per manual depending on size and page count.
+- **Query** tab — type a question in natural language. The answer appears with inline `(p.N)` citations that hyperlink directly to the PDF page. Four quality scores are shown per response.
+- **Document Tree** tab — browse the indexed TOC hierarchy for each document.
+- **Audit Log** tab — full JSONL record of every query session, exportable.
 
 ### Command line
 
@@ -107,9 +135,10 @@ python src/agent_test.py "What is the ISS emergency oxygen procedure?"
 | Query | Manual used |
 |---|---|
 | "A crew member is going into cardiac arrest, what should I do?" | ISS Medical Emergency Manual → ALS Algorithm |
-| "Crew member is having a seizure" | ISS Medical Emergency Manual → Seizure |
+| "Crew member is having a severe allergic reaction" | ISS Medical Emergency Manual → 1.101 Severe Allergic Reaction |
 | "What is the ISS re-entry procedure?" | JSC Flight Procedures Handbook |
 | "How do I handle a toxic exposure on station?" | ISS Medical Emergency Manual → Toxic Exposure |
+| "Please explain Figure 2-5 Simplified TAEM guidance" | JSC Flight Procedures Handbook → figure page image |
 
 ---
 
@@ -127,23 +156,28 @@ Place PDFs in `data/raw_pdfs/` and index them via the UI. Documents used during 
 
 ```
 nasa-procedural-recall/
-├── app.py                     Streamlit UI
-├── requirements.txt
+├── app.py                     Streamlit UI (query, documents, audit, document tree tabs)
+├── pyproject.toml
 ├── policies/
-│   └── policy.yaml            Governance config (model, retrieval, safety constraints)
+│   └── policy.yaml            Governance config (model, retrieval thresholds, safety constraints)
 ├── data/
 │   ├── raw_pdfs/              Place source PDFs here (not tracked in git)
+│   ├── synonyms.yaml          User-editable synonym overlay (merged with hardcoded clusters)
 │   └── manifest.json          Document registry
-├── indexes/                   PageIndex tree JSONs (generated, not tracked)
+├── indexes/                   PageIndex tree JSONs (generated by indexer)
 ├── logs/
-│   └── audit.jsonl            Query audit log (generated, not tracked)
+│   └── audit.jsonl            Per-query audit log (generated, not tracked)
+├── static/                    Static PDF copies for in-browser page links (not tracked)
+├── .streamlit/
+│   └── config.toml            Streamlit theme and static serving config
 └── src/
-    ├── agent_test.py          Main agent pipeline
-    ├── classify_query.py      Keyword-based query router
-    ├── retrieve_pageindex.py  Local tree-walker retriever with synonym expansion
-    ├── safety_scan.py         Citation checks and length enforcement
-    ├── audit.py               JSONL audit writer
-    ├── llm_ollama.py          Ollama /api/chat wrapper (Qwen2.5)
+    ├── agent_test.py          Main pipeline: classify → retrieve → generate → scan → audit
+    ├── classify_query.py      LLM-based query router (4 classes)
+    ├── retrieve_pageindex.py  Four-tier Vision-RAG retriever with synonym expansion and BM25 re-rank
+    ├── safety_scan.py         Citation hit check, length enforcement, fail-safe detection
+    ├── audit.py               Structured JSONL audit writer
+    ├── audit_structure.py     LLM-based post-index structure auditor
+    ├── llm_ollama.py          Ollama /api/chat wrapper with vision (base64 image) support
     ├── policy.py              Policy loader
     └── run_index_worker.py    Background indexing subprocess
 ```
@@ -154,8 +188,42 @@ nasa-procedural-recall/
 
 | Layer | Check |
 |---|---|
-| Retrieval gate | If no pages meet the confidence threshold, escalation response is returned without calling the LLM |
-| Citation check | Citations to pages outside the retrieved set are blocked |
+| Query classification | Prohibited queries are refused before retrieval; safety-critical queries receive a stricter response preamble |
+| Retrieval gate | If no pages meet `min_score`, a fixed escalation response is returned without calling the LLM |
+| BM25 re-ranking | False-positive VLM retrievals are down-weighted before the evidence block is built |
+| Citation check | Citations to pages outside the retrieved set are flagged as `bad_citations` and blocked |
 | Length check | Responses exceeding 5,000 characters are blocked |
-| Fail-safe | If the LLM returns no answer grounded in evidence, a fixed escalation message is shown |
-| Audit | All decisions — including blocks and fail-safes — are logged with ISO timestamps |
+| Fail-safe | If the LLM returns no evidence-grounded answer, a fixed escalation message is shown |
+| Audit | All decisions — including blocks, fail-safes, retrieval tier, and quality scores — are logged with ISO timestamps |
+
+---
+
+## Credits
+
+### PageIndex — VectifyAI
+
+The document indexing pipeline is built on top of **[PageIndex](https://github.com/VectifyAI/PageIndex)** by [VectifyAI](https://github.com/VectifyAI).
+
+PageIndex constructs hierarchical tree indexes from PDF documents using a vision-language model, producing structured JSON node summaries with page ranges that this system's retrieval tiers traverse at query time. Without PageIndex, the four-tier retrieval cascade in `retrieve_pageindex.py` would not be possible.
+
+```
+@misc{pageindex,
+  author       = {VectifyAI},
+  title        = {PageIndex: LLM-powered hierarchical PDF index},
+  year         = {2024},
+  url          = {https://github.com/VectifyAI/PageIndex}
+}
+```
+
+### Qwen2.5-VL
+
+Inference is powered by **[Qwen2.5-VL](https://github.com/QwenLM/Qwen2.5-VL)** from Alibaba DAMO Academy, served locally via [Ollama](https://ollama.com/).
+
+---
+
+## Contributors
+
+| GitHub | Role |
+|---|---|
+| [@zaczwijacz](https://github.com/zaczwijacz) | Project lead, system architecture, pipeline development |
+| [@mitulj9](https://github.com/mitulj9) | Contributor |
