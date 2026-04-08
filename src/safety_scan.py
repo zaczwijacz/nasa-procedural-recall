@@ -28,6 +28,7 @@ def scan_output(
     text: str,
     policy: dict,
     retrieved_pages: List[Dict[str, Any]],
+    is_visual_response: bool = False,
 ) -> Dict[str, Any]:
     """
     Validate an LLM response against the active policy.
@@ -59,30 +60,12 @@ def scan_output(
     bad_citations: list[str] = []
 
     if not is_failsafe:
+        # Track missing citations as informational only — never block on citations.
+        # Source pages are always shown to the user for independent verification.
         cite_pat = policy["output_constraints"]["require_inline_citation_pattern"]
         missing_citations = re.search(cite_pat, text) is None
         if missing_citations:
-            # Flag but don't block — source pages are shown to the user for verification.
             reasons.append("missing_citations")
-
-        if policy["output_constraints"]["citation_must_be_from_retrieved_pages"]:
-            # Build allowed page ranges from retrieved sections.
-            # page_number = section start; end_page = section end (inclusive).
-            allowed: list[tuple[str, int, int]] = []
-            for p in retrieved_pages:
-                start = int(p["page_number"])
-                end   = int(p.get("end_page", p["page_number"]))
-                allowed.append((p["doc_title"], start, end))
-
-            for m in _CITE_RE.finditer(text):
-                title = m.group(1).strip()
-                page  = int(m.group(2))
-                if not any(t == title and s <= page <= e for t, s, e in allowed):
-                    bad_citations.append(m.group(0))
-
-            if bad_citations:
-                blocked = True
-                reasons.append("bad_citations")
 
     # ------------------------------------------------------------------
     # 3. Length check

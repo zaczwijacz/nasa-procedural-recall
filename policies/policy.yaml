@@ -4,18 +4,24 @@ system_name: "procedural-recall-assistant"
 llm:
   provider: "ollama"
   base_url: "http://localhost:11434"
-  model: "qwen2.5:7b-instruct"
+  model: "qwen2.5vl:7b"
   temperature: 0.0
-  timeout_seconds: 300
+  timeout_seconds: 420
+
+vlm:
+  model: "qwen2.5vl:7b"
+  render_dpi: 96
+  max_images_per_query: 3
+  enabled: true
 
 retrieval:
   tool: "pageindexai"
-  top_k: 6
+  top_k: 4
   min_score: 0.15
   require_evidence_for:
     - procedural
     - safety_critical
-  max_total_chars_evidence: 18000
+  max_total_chars_evidence: 8000
 
 routing:
   modes:

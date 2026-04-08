@@ -78,7 +78,7 @@ def main() -> None:
                 str(PAGEINDEX_DIR / "run_pageindex.py"),
                 "--pdf_path",           str(pdf_path),
                 "--toc-check-pages",    "3",
-                "--model",              "qwen2.5-10k",
+                "--model",              "qwen2.5vl:7b",
                 "--max-pages-per-node", "3",
             ],
             cwd=str(PAGEINDEX_DIR),

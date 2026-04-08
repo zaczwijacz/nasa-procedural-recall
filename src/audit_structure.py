@@ -19,9 +19,9 @@ The two audit prompts used are:
             corrections list, recommended revised top-level structure.
 """
 
+import base64
 import json
 import sys
-import textwrap
 from pathlib import Path
 
 import pymupdf
@@ -35,13 +35,13 @@ INDEX_DIR = ROOT / "indexes"
 PDF_DIR   = ROOT / "data" / "raw_pdfs"
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-MODEL           = "qwen2.5:7b-instruct"
+MODEL           = "qwen2.5vl:7b"
 
-# How many pages of the PDF to send as "source document" context.
+# How many pages of the PDF to render as images for the VLM audit.
 # TOCs are almost always in the first ~20 pages.
-_TOC_PAGE_LIMIT = 20
-# Max characters of source text to send (keep within context window).
-_MAX_SOURCE_CHARS = 6000
+_TOC_PAGE_LIMIT  = 20
+# DPI for page rendering — 120 keeps images small enough for fast VLM ingestion.
+_RENDER_DPI      = 120
 # Max characters of current structure JSON to send.
 _MAX_STRUCT_CHARS = 4000
 
@@ -116,21 +116,21 @@ def _find_pdf(stem: str) -> Path | None:
     return None
 
 
-def _extract_toc_text(pdf_path: Path) -> tuple[str, int]:
+def _render_toc_images(pdf_path: Path) -> tuple[list[str], int]:
     """
-    Extract text from the first _TOC_PAGE_LIMIT pages (or all pages if fewer).
-    Returns (text, pages_read).
+    Render the first _TOC_PAGE_LIMIT pages as base64 PNGs for VLM input.
+    Returns (images_b64, pages_rendered).
     """
-    doc = pymupdf.open(str(pdf_path))
-    n   = min(len(doc), _TOC_PAGE_LIMIT)
-    parts = []
+    doc    = pymupdf.open(str(pdf_path))
+    n      = min(len(doc), _TOC_PAGE_LIMIT)
+    mat    = pymupdf.Matrix(_RENDER_DPI / 72, _RENDER_DPI / 72)
+    images = []
     for i in range(n):
-        page_text = doc[i].get_text().strip()
-        if page_text:
-            parts.append(f"[Page {i+1}]\n{page_text}")
+        pix       = doc[i].get_pixmap(matrix=mat)
+        img_bytes = pix.tobytes("png")
+        images.append(base64.b64encode(img_bytes).decode())
     doc.close()
-    combined = "\n\n".join(parts)
-    return combined[:_MAX_SOURCE_CHARS], n
+    return images, n
 
 
 def _load_structure(stem: str) -> dict | None:
@@ -160,20 +160,23 @@ def _compact_structure(structure: dict) -> str:
     return full[:_MAX_STRUCT_CHARS]
 
 
-def _call_ollama(prompt: str, label: str) -> str:
+def _call_ollama(prompt: str, label: str, images: list[str] | None = None) -> str:
     print(f"\n{'='*60}")
     print(f"  {label}")
     print(f"{'='*60}")
+    user_msg: dict = {"role": "user", "content": prompt}
+    if images:
+        user_msg["images"] = images
     try:
         resp = requests.post(
             f"{OLLAMA_BASE_URL}/api/chat",
             json={
-                "model":   MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "stream":  False,
-                "options": {"temperature": 0, "num_predict": 2048},
+                "model":    MODEL,
+                "messages": [user_msg],
+                "stream":   False,
+                "options":  {"temperature": 0, "num_predict": 2048},
             },
-            timeout=120,
+            timeout=300,
         )
         resp.raise_for_status()
         return resp.json()["message"]["content"].strip()
@@ -198,24 +201,32 @@ def audit(pdf_stem: str) -> None:
         print(f"ERROR: No structure JSON found in {INDEX_DIR}")
         sys.exit(1)
 
-    source_text, n_pages = _extract_toc_text(pdf_path)
-    compact              = _compact_structure(structure)
+    images, n_pages = _render_toc_images(pdf_path)
+    compact         = _compact_structure(structure)
 
-    print(f"PDF: {pdf_path.name}  ({n_pages} pages read for TOC context)")
-    print(f"Structure: {len(compact)} chars  |  Source extract: {len(source_text)} chars")
+    print(f"PDF: {pdf_path.name}  ({n_pages} pages rendered as images for VLM audit)")
+    print(f"Structure: {len(compact)} chars  |  Images: {len(images)}")
 
-    # --- Pass 1: accuracy check ---
+    # --- Pass 1: accuracy check (VLM reads page images directly) ---
     p1 = _PROMPT_PASS1.format(
-        structure=compact, source=source_text, n_pages=n_pages
+        structure=compact, source="[See attached page images]", n_pages=n_pages
     )
-    result1 = _call_ollama(p1, "PASS 1 — Accuracy check (Accurate / Needs Revision / Missing)")
+    result1 = _call_ollama(
+        p1,
+        "PASS 1 — Accuracy check (Accurate / Needs Revision / Missing)",
+        images=images,
+    )
     print(result1)
 
     # --- Pass 2: structural audit ---
     p2 = _PROMPT_PASS2.format(
-        structure=compact, source=source_text, n_pages=n_pages
+        structure=compact, source="[See attached page images]", n_pages=n_pages
     )
-    result2 = _call_ollama(p2, "PASS 2 — Structural audit (corrections + revised top-level)")
+    result2 = _call_ollama(
+        p2,
+        "PASS 2 — Structural audit (corrections + revised top-level)",
+        images=images,
+    )
     print(result2)
 
     print(f"\n{'='*60}")

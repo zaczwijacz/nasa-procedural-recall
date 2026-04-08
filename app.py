@@ -10,10 +10,12 @@ Tabs:
 import datetime
 import json
 import os
+import re
 import subprocess
 import sys
 import time
 from pathlib import Path
+from urllib.parse import quote
 
 import pymupdf
 import streamlit as st
@@ -44,6 +46,18 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+# Theme toggle in sidebar
+with st.sidebar:
+    st.caption("**Display**")
+    light_mode = st.toggle("Light mode", value=False)
+
+if light_mode:
+    st.markdown("""<style>
+        .stApp, [data-testid="stAppViewContainer"] { background-color: #ffffff !important; color: #000000 !important; }
+        [data-testid="stSidebar"] { background-color: #f0f2f6 !important; }
+        .stMarkdown, .stCaption, p, li { color: #000000 !important; }
+    </style>""", unsafe_allow_html=True)
 
 st.markdown("""
 <style>
@@ -171,6 +185,42 @@ def find_pdf(doc_title: str) -> Path | None:
 
 
 # ---------------------------------------------------------------------------
+# Inline page-link injection
+# ---------------------------------------------------------------------------
+
+# Matches: (p.4)  or  (p.4, p.5)  or  (p.4, p.5, p.6)
+_PAGE_REF_RE = re.compile(r'\(p\.(\d+)(?:,\s*p\.(\d+))*\)')
+
+def inject_page_links(text: str, pages: list) -> str:
+    """
+    Convert LLM-generated (p.N) / (p.N, p.M) inline citations into clickable
+    HTML links that open in a new tab.
+    """
+    # Build page_number → URL map from all retrieved sections
+    page_url: dict[int, str] = {}
+    for p in pages:
+        doc_file = p.get("doc_name", "") or f"{p['doc_title']}.pdf"
+        encoded  = quote(doc_file)
+        for pg in range(p["page_number"], p.get("end_page", p["page_number"]) + 1):
+            page_url[pg] = f"http://localhost:8501/app/static/{encoded}#page={pg}"
+
+    def _replace(m: re.Match) -> str:
+        # Extract all page numbers from the full match string
+        nums = re.findall(r'\d+', m.group(0))
+        parts = []
+        for n_str in nums:
+            n   = int(n_str)
+            url = page_url.get(n)
+            if url:
+                parts.append(f'<a href="{url}" target="_blank">p.{n}</a>')
+            else:
+                parts.append(f"p.{n}")
+        return "(" + ", ".join(parts) + ")"
+
+    return _PAGE_REF_RE.sub(_replace, text)
+
+
+# ---------------------------------------------------------------------------
 # Result renderer — defined BEFORE the tab blocks that call it
 # ---------------------------------------------------------------------------
 
@@ -179,20 +229,84 @@ def render_result(msg: dict) -> None:
     col_ans, col_src = st.columns([3, 2], gap="medium")
 
     with col_ans:
-        qtype = msg["query_type"]
-        conf  = msg["confidence"]
-        ts    = msg.get("ts", "")
-        icon  = {"safety_critical": "🔴", "procedural": "🟡",
-                 "informational": "🟢", "prohibited": "⛔"}.get(qtype, "⚪")
+        qtype   = msg["query_type"]
+        ts      = msg.get("ts", "")
+        icon    = {"safety_critical": "🔴", "procedural": "🟡",
+                   "informational": "🟢", "prohibited": "⛔"}.get(qtype, "⚪")
+        quality = msg.get("quality", {})
 
-        st.caption(f"{icon} **{qtype}** · confidence {conf:.0%} · {ts}")
+        st.caption(f"{icon} **{qtype}** · {ts}")
+
+        if quality:
+            def _dot(v: float) -> str:
+                return "🟢" if v >= 0.70 else ("🟡" if v >= 0.40 else "🔴")
+
+            def _tip(label: str, tooltip: str, value: str) -> str:
+                return (
+                    f'{_dot(float(value.strip("%")) / 100)} {label} '
+                    f'<span title="{tooltip}" style="cursor:help;font-size:0.75em;'
+                    f'color:#888;vertical-align:super;">ℹ</span> {value}'
+                )
+
+            r  = quality.get("retrieval",    0)
+            a  = quality.get("llm_quality",  0)
+            co = quality.get("completeness", 0)
+            cv = quality.get("coverage",     0)
+            st.markdown(
+                "<small>" +
+                "  ·  ".join([
+                    _tip("Retrieval",    "How closely the source pages pulled from the manuals matched your query. Higher = better page match.",                                        f"{r:.0%}"),
+                    _tip("Answer",       "Whether the LLM produced a substantive response. Penalised for failsafe escalation, missing or incorrect citations.",                        f"{a:.0%}"),
+                    _tip("Completeness", "Whether the response is detailed enough to be actionable. Very short answers score lower.",                                                   f"{co:.0%}"),
+                    _tip("Coverage",     "How many relevant manual sections were found relative to the search limit. Low coverage may mean the topic spans more pages than retrieved.", f"{cv:.0%}"),
+                ]) +
+                "</small>",
+                unsafe_allow_html=True,
+            )
+
+        # --- Confidence transparency ---
+        _classifier_conf = msg.get("confidence", 1.0)
+        _top_ret_score   = max((p["score"] for p in msg.get("pages", [])), default=0.0)
+        if (_classifier_conf < 0.70 or _top_ret_score < 0.30) and not msg["failsafe"]:
+            st.warning(
+                "Low confidence result — please verify directly with the source "
+                "document before acting on this guidance.",
+                icon="⚠️",
+            )
+        _cc_tip  = "title=\"How certain the classifier was that it correctly identified the query type (safety-critical / procedural / informational). Does not reflect answer accuracy.\""
+        _ret_tip = "title=\"The highest match score across all retrieved pages. Below 0.30 means the retrieval may have found the wrong section — verify the source pages.\""
+        st.markdown(
+            f"<small>"
+            f"<span {_cc_tip} style=\"cursor:help;\">Classifier confidence <sup style='color:#888;'>ℹ</sup></span>: {_classifier_conf:.2f}"
+            f"  |  "
+            f"<span {_ret_tip} style=\"cursor:help;\">Top retrieval score <sup style='color:#888;'>ℹ</sup></span>: {_top_ret_score:.2f}"
+            f"</small>",
+            unsafe_allow_html=True,
+        )
 
         if msg["failsafe"]:
             st.warning(msg["answer"], icon="⚠️")
             if msg.get("failsafe_reason"):
                 st.caption(f"Reason: `{msg['failsafe_reason']}`")
         else:
-            st.markdown(msg["answer"])
+            linked = inject_page_links(msg["answer"], msg.get("pages", []))
+            st.markdown(linked, unsafe_allow_html=True)
+
+        # Inline source page links — one per retrieved section
+        pages = msg.get("pages", [])
+        if pages and not msg["failsafe"]:
+            parts = []
+            for p in pages:
+                doc_file = p.get("doc_name", "") or f"{p['doc_title']}.pdf"
+                start    = p["page_number"]
+                end      = p.get("end_page", start)
+                page_ref = f"p.{start}" if start == end else f"pp.{start}–{end}"
+                url      = f"http://localhost:8501/app/static/{quote(doc_file)}#page={start}"
+                parts.append(f'<a href="{url}" target="_blank">📄 {p["doc_title"]} · {page_ref}</a>')
+            st.markdown(
+                "<small><b>Sources:</b> " + "  ·  ".join(parts) + "</small>",
+                unsafe_allow_html=True,
+            )
 
         # Only show safety flags banner when the response was actually blocked.
         if msg["failsafe"] and msg.get("failsafe_reason") == "safety_scan_blocked":
@@ -338,6 +452,22 @@ with tab_docs:
 with tab_chat:
     st.title("Procedural Recall Query")
 
+    with st.expander("ℹ️ How to read the response metrics", expanded=False):
+        st.markdown(
+            """
+Each response is scored across **four independent metrics** to help you judge answer quality at a glance:
+
+| Metric | What it measures |
+|---|---|
+| **Retrieval** | How closely the source pages pulled from the manuals matched your query. Higher = better page match. |
+| **Answer** | Whether the LLM produced a substantive response (penalised for failsafe escalation, missing or incorrect citations). |
+| **Completeness** | Whether the response is detailed enough to be actionable — very short answers score lower. |
+| **Coverage** | How many relevant manual sections were found relative to the search limit. |
+
+Scores are color-coded: 🟢 ≥ 70% · 🟡 40–69% · 🔴 < 40%
+            """
+        )
+
     ready_pdfs = [
         p for p in sorted(PDF_DIR.glob("*.pdf"))
         if (INDEX_DIR / f"{p.stem}_structure.json").exists()
@@ -388,6 +518,7 @@ with tab_chat:
             "answer":         result["final_response"],
             "query_type":     result["query_type"],
             "confidence":     result["classifier_confidence"],
+            "quality":        result.get("quality_score", {}),
             "failsafe":       result["failsafe_triggered"],
             "failsafe_reason": result.get("failsafe_reason"),
             "pages":          result["retrieved_pages"],
@@ -666,26 +797,48 @@ def _sanitize_dot(s: str) -> str:
     return s.replace('"', "'").replace("\\", "/").replace("\n", " ")
 
 
-def _build_doc_tree_dot(structure: list, doc_label: str) -> str:
+def _section_page_label(n: int, offsets: list[dict]) -> str:
+    """Convert a PDF page number to its section-page label (e.g. 88 -> '4-58')."""
+    for seg in offsets:
+        if seg["pdf_start"] <= n <= seg["pdf_end"]:
+            return f"{seg['prefix']}{n - seg['offset']}"
+    return str(n)
+
+
+def _build_doc_tree_dot(
+    structure: list,
+    doc_label: str,
+    section_offsets: list[dict] | None = None,
+) -> str:
     """
     Recursively build a Graphviz DOT string representing the indexed
     section hierarchy of one document.
 
     Each node shows the section title (truncated to 35 chars) and page range.
     Colour encodes depth.  Layout is left-to-right so deep trees stay readable.
+    If section_offsets is provided, page numbers are shown as section-page
+    labels (e.g. '4-58') instead of raw PDF page numbers.
     """
     lines: list[str] = []
     node_counter = [0]
+
+    def _page_str(start, end) -> str:
+        if section_offsets:
+            s = _section_page_label(start, section_offsets)
+            e = _section_page_label(end, section_offsets)
+        else:
+            s, e = str(start), str(end)
+        return f"pp.{s}–{e}" if s != e else f"p.{s}"
 
     def _add_node(node: dict, parent_id: str | None, depth: int) -> None:
         nid = f"n{node_counter[0]}"
         node_counter[0] += 1
 
         title   = node.get("title", "")
-        start   = node.get("start_index", "?")
+        start   = node.get("start_index", 0)
         end     = node.get("end_index", start)
         label   = _sanitize_dot(title[:35] + ("…" if len(title) > 35 else ""))
-        pages   = f"pp.{start}–{end}" if start != end else f"p.{start}"
+        pages   = _page_str(start, end)
         color   = _DEPTH_COLORS[min(depth, len(_DEPTH_COLORS) - 1)]
 
         lines.append(
@@ -708,7 +861,16 @@ def _build_doc_tree_dot(structure: list, doc_label: str) -> str:
         f'fontname="Arial Bold", fontsize=11, margin="0.3,0.2"]'
     )
 
-    for top_node in structure:
+    # If the index has exactly one wrapper node whose children are the real
+    # chapters (legacy structure), skip the wrapper so chapters appear at
+    # depth 1 (green).  With a properly structured index (multiple top-level
+    # chapters) no flattening is needed.
+    if len(structure) == 1 and structure[0].get("nodes"):
+        top_nodes = structure[0]["nodes"]
+    else:
+        top_nodes = structure
+
+    for top_node in top_nodes:
         _add_node(top_node, root_id, depth=1)
 
     dot = (
@@ -789,7 +951,11 @@ with tab_doctree:
         col_b.metric("Tree depth", max_depth_val[0] + 1)
         col_c.metric("Top-level sections", len(structure))
 
-        dot_src = _build_doc_tree_dot(structure, selected_name)
+        dot_src = _build_doc_tree_dot(
+            structure,
+            selected_name,
+            section_offsets=selected_data.get("section_offsets"),
+        )
         st.graphviz_chart(dot_src, use_container_width=True)
 
         with st.expander("View raw structure JSON"):

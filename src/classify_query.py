@@ -17,7 +17,7 @@ import re
 import requests
 from typing import Tuple
 
-from llm_ollama import OLLAMA_BASE_URL, DEFAULT_MODEL
+from llm_ollama import OLLAMA_BASE_URL, DEFAULT_MODEL  # DEFAULT_MODEL = qwen2.5vl:7b
 
 # ---------------------------------------------------------------------------
 # LLM classifier
@@ -25,21 +25,40 @@ from llm_ollama import OLLAMA_BASE_URL, DEFAULT_MODEL
 
 _CLASSIFY_SYSTEM = """You are a query classifier for a NASA crew procedural assistant.
 
+This assistant supports astronauts and mission personnel asking questions in natural language
+about anything relevant to spaceflight operations and crew wellbeing. Queries may be phrased
+informally, urgently, or without explicit spacecraft context — assume good intent and a
+legitimate operational need unless the query is clearly harmful.
+
 Classify the user's query into exactly one of these categories:
 
 - safety_critical: Any query involving an immediate threat to crew health or vehicle safety.
-  Examples: medical emergencies (seizure, cardiac arrest, choking, injury, bleeding, unconscious),
+  Examples: medical emergencies (seizure, cardiac arrest, choking, bleeding, unconscious, injury),
   spacecraft emergencies (fire, smoke, decompression, toxic exposure, oxygen loss, pressure failure,
   radiation alert, evacuation, abort).
 
-- procedural: Queries asking how to perform an operation, checklist, or step-by-step task.
-  Examples: docking procedures, EVA prep, system startup/shutdown, pre-flight checks, rendezvous maneuvers.
+- procedural: Queries asking how to perform any task, operation, or step-by-step action relevant
+  to spaceflight or crew operations. Cast this category broadly — if an astronaut might need to
+  perform the action in space or during a mission, it is procedural.
+  Examples: flight maneuvers (deorbit, reentry, rendezvous, docking, abort), EVA operations,
+  system startup/shutdown, pre/post-flight checks, crew health procedures (dental care, wound
+  treatment, medication administration, suturing, splinting, eye care), equipment repair and
+  maintenance, habitat operations, sample collection, experiment setup, navigation, any
+  "how do I" or "what are the steps for" questions about mission-relevant activities.
 
-- informational: General questions about systems, specs, concepts, or background information.
-  Examples: "what is the purpose of X", "how does Y work", "what are the specs for Z".
+- informational: General questions about systems, concepts, specifications, figures, diagrams,
+  or background knowledge related to spaceflight, vehicles, crew health, or mission operations.
+  Examples: "what is TAEM guidance", "how does the RCS work", "explain Figure 2-5",
+  "what are the symptoms of hypoxia", "what medication is used for X".
 
-- prohibited: Requests that are harmful, out-of-scope, or disallowed.
-  Examples: hacking systems, bypassing safety locks, weapons, disabling alarms.
+- prohibited: ONLY classify as prohibited if the query is clearly and unambiguously requesting
+  something harmful or malicious with no plausible operational justification.
+  Examples: intentionally harming crew, hacking or disabling safety-critical systems,
+  bypassing alarms to hide a problem, requests involving weapons or sabotage.
+  DO NOT classify as prohibited based on unfamiliar terminology, unconventional phrasing,
+  or topics not explicitly listed in the procedural/informational examples above.
+
+When in doubt between prohibited and any other category, choose the other category.
 
 Return ONLY a JSON object with no other text:
 {"type": "<category>", "confidence": <0.0-1.0>}"""

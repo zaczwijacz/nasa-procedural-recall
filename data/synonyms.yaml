@@ -1,0 +1,78 @@
+# NASA Procedural Recall Assistant — synonym expansion dictionary
+# Deep-merged with the hardcoded _SYNONYMS in retrieve_pageindex.py at import time.
+# Keys that already exist in _SYNONYMS have their sets unioned (no entries removed).
+# New keys here are added wholesale.
+# Edit this file to extend coverage without touching Python source.
+
+fire:
+  - engine fire
+  - cabin fire
+  - electrical fire
+  - smoke
+  - combustion
+  - conflagration
+
+allergy:
+  - anaphylaxis
+  - anaphylactic
+  - epipen
+  - epinephrine
+  - allergic reaction
+  - hypersensitivity
+
+decompression:
+  - depressurisation
+  - depressurization
+  - pressure loss
+  - rapid decompression
+  - cabin pressure
+
+cardiac:
+  - heart attack
+  - myocardial infarction
+  - chest pain
+  - aed
+  - defibrillation
+  - cpr
+
+# --- additional operational clusters ---
+
+oxygen:
+  - hypoxia
+  - o2
+  - oxygen depletion
+  - oxygen failure
+  - oxygen loss
+
+burn:
+  - thermal burn
+  - chemical burn
+  - radiation burn
+  - skin burn
+
+fracture:
+  - broken bone
+  - bone break
+  - splint
+  - immobilise
+  - immobilize
+
+bleeding:
+  - haemorrhage
+  - hemorrhage
+  - laceration
+  - wound
+  - tourniquet
+
+reentry:
+  - entry
+  - deorbit
+  - descent
+  - atmospheric entry
+
+docking:
+  - rendezvous
+  - capture
+  - berthing
+  - undocking
+  - proximity operations

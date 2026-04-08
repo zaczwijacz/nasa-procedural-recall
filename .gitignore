@@ -16,6 +16,18 @@ data/index_status.json
 # PageIndex-generated tree indexes (reproduced by running the indexer)
 indexes/
 
+# Static file server copies of PDFs (reproduced from data/raw_pdfs/)
+static/
+
+# Source PDFs in data/ root (large files, obtain separately)
+data/*.pdf
+
+# Claude Code agent memory (personal/local)
+.claude/
+
+# Runtime results
+results/
+
 # OS
 .DS_Store
 Thumbs.db

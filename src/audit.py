@@ -26,6 +26,10 @@ def write_audit_event(log_path: str, event: dict) -> None:
     event.setdefault("ts_start", time.time())
     event.setdefault("ts_end",   event["ts_start"])
 
+    # Guarantee retrieval provenance and failsafe flag are always present
+    event.setdefault("retrieval_type",    "unknown")
+    event.setdefault("failsafe_triggered", False)
+
     # Add ISO 8601 counterparts
     event["ts_iso_start"] = _to_iso(event["ts_start"])
     event["ts_iso_end"]   = _to_iso(event["ts_end"])

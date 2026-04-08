@@ -2,116 +2,232 @@
   "doc_name": "NASA-ISSmedicalEmergManual_2016.pdf",
   "structure": [
     {
-      "title": "NASA ISS Emergency Medical Procedures Manual Overview",
+      "title": "Preface / Introduction",
+      "summary": "Document description, NASA ISS Emergency Medical Procedures Manual overview, FOIA release notes.",
       "start_index": 1,
       "end_index": 3,
       "node_id": "0000",
-      "summary": "National Aeronautics and Space Administration (NASA) Emergency Medical Procedures Manual for the International Space Station (ISS), 2016. Covers emergency response, medical treatment, and crew health procedures.",
       "nodes": []
     },
     {
-      "title": "1.101 SEVERE ALLERGIC REACTION - Anaphylaxis EpiPen Treatment",
+      "title": "Chapter 1 — Emergency Medical Procedures",
+      "summary": "Acute emergency algorithms and checklists: allergic reaction, CPR, AED, ALS, choking, toxic exposure, seizure, difficulty breathing.",
       "start_index": 4,
-      "end_index": 5,
-      "node_id": "0001",
-      "summary": "Procedure to rapidly treat a severe allergic reaction (anaphylaxis) on ISS. Objective: rapidly treat allergic reaction. Items: Gray Tape, Emergency Medical Treatment Pack (Red), Epinephrine (EpiPen). Steps: deploying and using EpiPen auto-injector, monitoring patient, contacting surgeon.",
-      "nodes": []
-    },
-    {
-      "title": "1.103 ALS ALGORITHM - CPR Cardiac Resuscitation AED Defibrillator",
-      "start_index": 6,
-      "end_index": 16,
-      "node_id": "0002",
-      "summary": "Advanced Life Support (ALS) algorithm for cardiac arrest, CPR, and resuscitation on ISS. Covers: chest compressions, AED defibrillator use, intraosseous device insertion, medication administration (Atropine, Lidocaine, Epinephrine), respiratory assessment, oxygen delivery, CPR termination criteria. Also covers choking (airway obstruction, abdominal thrusts). Items: AED, Blood Oximeter, AMBU Bag, Intraosseous Device.",
-      "nodes": []
-    },
-    {
-      "title": "1.104 AED TROUBLESHOOTING - Automated External Defibrillator",
-      "start_index": 14,
-      "end_index": 15,
-      "node_id": "0003",
-      "summary": "Troubleshooting guide for AED (Automated External Defibrillator) on ISS. Steps for handling electrode contact issues, electrical interference, patient movement during AED analysis, and replacing AED electrodes.",
-      "nodes": []
-    },
-    {
-      "title": "1.106 TOXIC EXPOSURE - Decontamination Chemical Poison Gas Inhalation",
-      "start_index": 17,
-      "end_index": 18,
-      "node_id": "0004",
-      "summary": "Procedure to decontaminate and treat crew member after toxic exposure on ISS. Covers: rescuer safety precautions (respiratory, eye, skin protection), skin decontamination (remove soiled clothes, brush particulate, flush with water), eye decontamination (flush eyes), inhalation exposure (fresh air, oxygen), ingestion exposure, physical exam, history documentation, downlink photos to ground, contact surgeon. Items: Drink Bag, Towel, Digital Camera. Toxic gas, chemical contamination, poison inhalation, hazardous substance exposure.",
-      "nodes": []
-    },
-    {
-      "title": "1.107 SEIZURE - Convulsion Anticonvulsant Medication",
-      "start_index": 19,
-      "end_index": 21,
-      "node_id": "0005",
-      "summary": "Procedure to treat seizure (convulsion) in ISS crew member. Objective: give medication to suppress seizure activity. Steps: protect patient from injury, administer intramuscular Diazepam (Valium) shot, apply blood oximeter, administer oxygen, obtain IV access, perform targeted physical exam, administer Phenytoin (Dilantin ER), obtain patient history, consult surgeon. Items: AA Batteries, Respiratory Support Pack, Medical Diagnostic Pack, Oral Medication Pack, Topical & Injectable Medication Pack.",
-      "nodes": []
-    },
-    {
-      "title": "1.108 DIFFICULTY BREATHING - Respiratory Distress Oxygen Treatment",
-      "start_index": 22,
       "end_index": 24,
-      "node_id": "0006",
-      "summary": "Procedure to evaluate and treat difficulty breathing (respiratory distress) in ISS crew. Steps: assess breathing and airway, measure blood oxygen with oximeter, administer oxygen via mask or AMBU bag, assess lung sounds with stethoscope, contact surgeon. Items: AA Batteries, Respiratory Support Pack, Medical Diagnostic Pack (Blue), Blood Oximeter.",
-      "nodes": []
+      "node_id": "0001",
+      "nodes": [
+        {
+          "title": "1.101 Severe Allergic Reaction (Anaphylaxis / EpiPen)",
+          "summary": "Algorithm for treating severe allergic reaction or anaphylaxis on ISS. Includes epinephrine (EpiPen) administration, Benadryl, monitoring for airway compromise.",
+          "start_index": 4,
+          "end_index": 5,
+          "node_id": "0002",
+          "nodes": [
+            {
+              "title": "1.1 — Remove Epinephrine (EpiPen) from protective plastic tubing",
+              "summary": "First step: remove EpiPen from its protective plastic tubing as shown in Figure 1.",
+              "start_index": 4,
+              "end_index": 4,
+              "node_id": "0002a",
+              "nodes": []
+            },
+            {
+              "title": "1.2 — Form a fist around EpiPen with thumb closest to safety cap",
+              "summary": "Grip step: form a fist around the EpiPen with thumb positioned closest to the safety cap.",
+              "start_index": 4,
+              "end_index": 4,
+              "node_id": "0002b",
+              "nodes": []
+            },
+            {
+              "title": "1.3 — Activate auto injector by pulling off safety cap",
+              "summary": "Activation step: pull off the safety cap to prepare the auto injector for use. See Figure 2. WARNING: do not put fingers over needle end; do not inject through clothing.",
+              "start_index": 4,
+              "end_index": 4,
+              "node_id": "0002c",
+              "nodes": []
+            },
+            {
+              "title": "1.4 — Press needle end against outer thigh; hold for 10 seconds",
+              "summary": "Injection step: using a jabbing motion, press needle end perpendicular and firmly against patient's outer thigh until a click is heard or felt. Hold firmly for 10 seconds. See Figure 3.",
+              "start_index": 5,
+              "end_index": 5,
+              "node_id": "0002d",
+              "nodes": []
+            },
+            {
+              "title": "1.5 — Discard used EpiPen; Call MCC-H to request PMC",
+              "summary": "Post-injection: discard used EpiPen in original protective plastic tubing, secure with Gray Tape. Call MCC-H to request a physician medical consultation (PMC).",
+              "start_index": 5,
+              "end_index": 5,
+              "node_id": "0002e",
+              "nodes": []
+            },
+            {
+              "title": "1.6 — EpiPen may be repeated every 20 minutes if symptoms recur or progress",
+              "summary": "Follow-up dosing: if allergic symptoms recur or progress, the EpiPen injection may be repeated every 20 minutes.",
+              "start_index": 5,
+              "end_index": 5,
+              "node_id": "0002f",
+              "nodes": []
+            }
+          ]
+        },
+        {
+          "title": "1.102 AED-Assisted CPR",
+          "summary": "Procedure for AED-assisted cardiopulmonary resuscitation (CPR). Covers single-rescuer and two-rescuer CPR, 30:2 compression-to-breath ratio, AED attachment and shock delivery.",
+          "start_index": 6,
+          "end_index": 6,
+          "node_id": "0003",
+          "nodes": []
+        },
+        {
+          "title": "1.103 ALS Algorithm (Advanced Life Support / Cardiac Arrest)",
+          "summary": "Advanced life support algorithm for cardiac arrest on ISS. Covers pulse check, chest compressions, defibrillation, IV/IO access, epinephrine administration, shockable vs non-shockable rhythms, return of spontaneous circulation (ROSC).",
+          "start_index": 7,
+          "end_index": 13,
+          "node_id": "0004",
+          "nodes": []
+        },
+        {
+          "title": "1.104 AED Troubleshooting",
+          "summary": "Troubleshooting guide for the Automated External Defibrillator (AED) on ISS. Lists common problems, possible causes, and corrective actions.",
+          "start_index": 14,
+          "end_index": 15,
+          "node_id": "0005",
+          "nodes": []
+        },
+        {
+          "title": "1.105 Choking",
+          "summary": "Algorithm for treating a choking crew member. Covers checking patient response, abdominal thrusts (Heimlich maneuver), back blows, unconscious patient procedure.",
+          "start_index": 16,
+          "end_index": 16,
+          "node_id": "0006",
+          "nodes": []
+        },
+        {
+          "title": "1.106 Toxic Exposure",
+          "summary": "Procedure for toxic chemical exposure on ISS. Covers decontamination, eye/skin irrigation, respiratory protection, crew evacuation considerations.",
+          "start_index": 17,
+          "end_index": 18,
+          "node_id": "0007",
+          "nodes": []
+        },
+        {
+          "title": "1.107 Seizure",
+          "summary": "Algorithm for managing a seizure (convulsion) on ISS. Covers protecting the patient, airway management, post-ictal care, medication administration.",
+          "start_index": 19,
+          "end_index": 21,
+          "node_id": "0008",
+          "nodes": []
+        },
+        {
+          "title": "1.108 Difficulty Breathing (Respiratory Distress)",
+          "summary": "Algorithm for crew member with difficulty breathing, respiratory distress, or shortness of breath. Covers airway assessment, oxygen administration, bronchodilators.",
+          "start_index": 22,
+          "end_index": 24,
+          "node_id": "0009",
+          "nodes": []
+        }
+      ]
     },
     {
-      "title": "2.6.001 MOUTH ANATOMY - Dental Reference",
+      "title": "Chapter 2 — Dental Procedures",
+      "summary": "Dental anatomy, examination, and emergency dental procedures for ISS crew including nerve blocks, fillings, crown replacement, tooth loss.",
       "start_index": 25,
-      "end_index": 26,
-      "node_id": "0007",
-      "summary": "Mouth anatomy reference and oral examination procedure for ISS dental care. Covers tooth structures, gum, and basic oral exam technique.",
-      "nodes": []
-    },
-    {
-      "title": "2.6.301 DENTAL PROCEDURE - NERVE BLOCK Tooth Anesthesia",
-      "start_index": 27,
-      "end_index": 29,
-      "node_id": "0008",
-      "summary": "Dental nerve block procedure for tooth anesthesia on ISS. Objective: administer local anesthetic to block dental pain. Steps: prepare lidocaine injection, identify injection site, administer nerve block, verify anesthesia. Items: Nitrile Gloves, Lidocaine syringe, Dental Tools Kit.",
-      "nodes": []
-    },
-    {
-      "title": "2.6.302 DENTAL PROCEDURE - TEMPORARY DENTAL FILLING Tooth Repair",
-      "start_index": 30,
-      "end_index": 31,
-      "node_id": "0009",
-      "summary": "Procedure to repair a dental filling on ISS (temporary tooth filling). Steps: document the dental filling loss, clean the tooth cavity, apply temporary tooth filling material, allow to set. Items: Nitrile Gloves, Gauze 4x4, Temporary Tooth Filling, Dental Tools Kit.",
-      "nodes": []
-    },
-    {
-      "title": "2.6.303 DENTAL PROCEDURE - DENTAL CROWN REPLACEMENT",
-      "start_index": 32,
-      "end_index": 34,
-      "node_id": "0010",
-      "summary": "Procedure to replace a lost dental crown on ISS. Steps: document the lost crown, prepare dental adhesive, seat the crown with adhesive, ensure proper placement and bite. Items: Nitrile Gloves, Gauze 4x4, Dental Adhesive, Dental Adhesive Tip, Dental Tools Kit.",
-      "nodes": []
-    },
-    {
-      "title": "2.6.304 DENTAL PROCEDURE - EXPOSED DENTAL PULP Fractured Tooth",
-      "start_index": 35,
-      "end_index": 36,
-      "node_id": "0011",
-      "summary": "Treatment for fractured tooth with exposed dental pulp on ISS. Steps: document broken tooth, administer pain medication, apply Eugenol (clove oil) to exposed pulp to reduce pain and protect nerve. Items: Nitrile Gloves, Gauze 4x4, Eugenol.",
-      "nodes": []
-    },
-    {
-      "title": "2.6.305 DENTAL PROCEDURE - LOSS OF TOOTH Avulsion Bleeding",
-      "start_index": 37,
       "end_index": 38,
-      "node_id": "0012",
-      "summary": "Treatment for loss of tooth (avulsion) and tooth pain on ISS. Steps: control bleeding with gauze pressure, treat dental pain with Ibuprofen or Hydrocodone/Acetaminophen, consult surgeon. Items: Nitrile Gloves, Gauze 4x4, Ibuprofen, Hydrocodone and Acetaminophen.",
-      "nodes": []
+      "node_id": "0010",
+      "nodes": [
+        {
+          "title": "2.6.001 Mouth Anatomy",
+          "summary": "Reference diagram of mouth and dental anatomy for ISS crew medical use.",
+          "start_index": 25,
+          "end_index": 25,
+          "node_id": "0011",
+          "nodes": []
+        },
+        {
+          "title": "2.6.101 Mouth Exam",
+          "summary": "Procedure for conducting a dental and oral examination on ISS.",
+          "start_index": 26,
+          "end_index": 26,
+          "node_id": "0012",
+          "nodes": []
+        },
+        {
+          "title": "2.6.301 Dental Procedure — Nerve Block",
+          "summary": "Step-by-step procedure for administering a dental nerve block injection to manage tooth pain on ISS.",
+          "start_index": 27,
+          "end_index": 29,
+          "node_id": "0013",
+          "nodes": []
+        },
+        {
+          "title": "2.6.302 Dental Procedure — Temporary Dental Filling",
+          "summary": "Procedure for placing a temporary dental filling to manage a lost or broken filling on ISS.",
+          "start_index": 30,
+          "end_index": 31,
+          "node_id": "0014",
+          "nodes": []
+        },
+        {
+          "title": "2.6.303 Dental Procedure — Dental Crown Replacement",
+          "summary": "Procedure for replacing a lost dental crown on ISS using temporary cement.",
+          "start_index": 32,
+          "end_index": 34,
+          "node_id": "0015",
+          "nodes": []
+        },
+        {
+          "title": "2.6.304 Dental Procedure — Exposed Dental Pulp",
+          "summary": "Procedure for managing an exposed dental pulp (severe decay or broken tooth) on ISS.",
+          "start_index": 35,
+          "end_index": 36,
+          "node_id": "0016",
+          "nodes": []
+        },
+        {
+          "title": "2.6.305 Dental Procedure — Loss of Tooth (Avulsion)",
+          "summary": "Procedure for managing a knocked-out or avulsed tooth on ISS.",
+          "start_index": 37,
+          "end_index": 37,
+          "node_id": "0017",
+          "nodes": []
+        },
+        {
+          "title": "2.6.401 Dental Treatment — Tooth Pain",
+          "summary": "Decision algorithm for diagnosing and treating tooth pain on ISS.",
+          "start_index": 38,
+          "end_index": 38,
+          "node_id": "0018",
+          "nodes": []
+        }
+      ]
     },
     {
-      "title": "3.001 MEDICAL KIT - CONTENTS AND REFERENCE Medications Equipment",
+      "title": "Chapter 3 — Medical Kit Contents and Reference",
+      "summary": "Complete reference for ISS medical kit contents: medications, dosages, routes of administration, side effects, and storage locations. Covers Convenience Medication Pack, IV supplies, diagnostic equipment, surgical supplies.",
       "start_index": 39,
       "end_index": 65,
-      "node_id": "0013",
-      "summary": "Complete ISS Medical Kit contents and reference. Contains: Emergency Medical Treatment Pack (Red) with Epinephrine/EpiPen, AED; Oral Medication Pack with antibiotics (Amoxicillin, Azithromycin, Levofloxacin), pain medications (Hydrocodone, Ibuprofen), anticonvulsants (Phenytoin/Dilantin, Diazepam/Valium), cardiac medications (Nitroglycerin, Metoprolol, Lisinopril), antihistamines (Diphenhydramine/Benadryl, Fexofenadine), anti-nausea (Ondansetron/Zofran, Promethazine); Physician Equipment Pack with intubation supplies, oxygen system, suction device; Topical & Injectable Pack with Lidocaine, Ceftriaxone, Benzocaine; Surgical Tools Kit; Splints; Sutures; Catheters.",
-      "nodes": []
+      "node_id": "0019",
+      "nodes": [
+        {
+          "title": "3.001 Medical Kit — Contents and Reference (Part 1: Medications)",
+          "summary": "Tables listing all medications in the ISS medical kit by category: antibiotics, antidiarrheals, antihistamines, analgesics, epinephrine, steroids. Includes strength, quantity, route, and side effects.",
+          "start_index": 39,
+          "end_index": 52,
+          "node_id": "0020",
+          "nodes": []
+        },
+        {
+          "title": "3.001 Medical Kit — Contents and Reference (Part 2: Equipment and Supplies)",
+          "summary": "Tables listing medical equipment and supplies in the ISS kit: IV supplies, oxygen equipment, AED pads, surgical instruments, diagnostic tools.",
+          "start_index": 53,
+          "end_index": 65,
+          "node_id": "0021",
+          "nodes": []
+        }
+      ]
     }
   ]
 }
