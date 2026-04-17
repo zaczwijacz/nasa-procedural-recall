@@ -636,11 +636,16 @@ def _build_pipeline_dot(highlight: dict | None = None) -> str:
     has_pages    = bool(h.get("retrieved_pages"))
     is_prohibited = qtype == "prohibited"
 
+    classifier_conf = h.get("classifier_confidence", 1.0)
+    low_confidence  = classifier_conf < 0.70 and bool(h)
+
     def hl(node: str) -> str:
         """Return extra attributes if this node is on the highlighted path."""
         if not h:
             return ""
         active_nodes: set[str] = {"query", "classify"}
+        if low_confidence:
+            active_nodes.add("conf_warn")
         if is_prohibited:
             active_nodes |= {"prohibited", "audit"}
         else:
@@ -653,7 +658,7 @@ def _build_pipeline_dot(highlight: dict | None = None) -> str:
                 if failsafe_why == "safety_scan_blocked":
                     active_nodes |= {"failsafe_scan", "audit"}
                 else:
-                    active_nodes |= {"response", "audit"}
+                    active_nodes |= {"quality", "response", "audit"}
         if node in active_nodes:
             return ', penwidth=3, color="#FFFFFF"'
         return ""
@@ -663,6 +668,7 @@ def _build_pipeline_dot(highlight: dict | None = None) -> str:
     if qtype:
         classify_label += f"\\nLast query: {qtype}"
 
+    conf_warn_color = '#8b4500' if low_confidence else '#5a4a1a'
     dot = f"""
 digraph pipeline {{
     rankdir=TB
@@ -676,39 +682,48 @@ digraph pipeline {{
     classify [label="{classify_label}",
               style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("classify")}]
 
+    conf_warn [label="Confidence Warning\\nClassifier confidence < 0.70\\nUI warning shown · query continues",
+               style="filled,rounded,dashed", fillcolor="{conf_warn_color}", fontcolor="white"{hl("conf_warn")}]
+
     prohibited [label="BLOCKED\\nProhibited query\\nNo retrieval performed",
                 style="filled,rounded", fillcolor="#8b0000", fontcolor="white"{hl("prohibited")}]
 
-    retrieve [label="Stage 2 — Vision-RAG Retrieval\\nTier 0: Figure caption scan\\nTier 1: VLM tree search (qwen2.5vl:7b)\\nTier 2: Keyword + synonym expansion\\nTier 3: Full-page scan (fallback)\\nBM25 re-ranking",
+    retrieve [label="Stage 2 — Vision-RAG Retrieval\\nTier 0: Figure caption scan\\nTier 1: VLM tree search (qwen2.5vl:7b)\\nTier 2: Keyword + synonym expansion (YAML overlay)\\nTier 3: Full-page scan (fallback)\\nBM25 re-ranking",
               style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("retrieve")}]
 
     failsafe_evidence [label="FAIL-SAFE\\nInsufficient evidence\\nEscalate to ground support",
-                       style="filled,rounded", fillcolor="#8b4500", fontcolor="white"{hl("failsafe_evidence")}]
+                       style="filled,rounded", fillcolor="#8b0000", fontcolor="white"{hl("failsafe_evidence")}]
 
-    generate [label="Stage 3 — Answer Generation\\nqwen2.5vl:7b · Text + page images\\nEvidence-only · Temp=0 · Inline (p.N) citations",
+    generate [label="Stage 3 — Answer Generation\\nqwen2.5vl:7b · Text + page images (96 DPI)\\nEvidence-only · Temp=0 · Inline (p.N) citations",
               style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("generate")}]
 
     scan [label="Stage 4 — Safety Scan\\nCitation hit check · Length check\\nFail-safe pattern detection",
           style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("scan")}]
 
     failsafe_scan [label="FAIL-SAFE\\nOutput blocked\\nEscalate to ground support",
-                   style="filled,rounded", fillcolor="#8b4500", fontcolor="white"{hl("failsafe_scan")}]
+                   style="filled,rounded", fillcolor="#8b0000", fontcolor="white"{hl("failsafe_scan")}]
 
-    response [label="Final Response\\nShown to crew member",
+    quality [label="Stage 5 — Quality Scoring\\nRetrieval · Answer · Completeness · Coverage\\nColor-coded scores shown in UI",
+             style="filled,rounded", fillcolor="#1a5a6a", fontcolor="white"{hl("quality")}]
+
+    response [label="Final Response\\nInline citations · PDF page links\\nShown to crew member",
               shape=parallelogram, style="filled,rounded",
               fillcolor="#1a4a8a", fontcolor="white"{hl("response")}]
 
-    audit [label="Stage 5 — Audit Log\\nQuery · retrieval_type · quality_score\\nTimestamped · SHA-256 prompt hash",
+    audit [label="Stage 6 — Audit Log\\nQuery · retrieval_type · quality_score\\nTimestamped · SHA-256 prompt hash",
            style="filled,rounded", fillcolor="#4a1a8a", fontcolor="white"{hl("audit")}]
 
     query     -> classify
+    classify  -> conf_warn         [label="confidence < 0.70", style=dashed, color="#aa6600"]
+    conf_warn -> retrieve          [style=dashed, color="#aa6600"]
     classify  -> prohibited        [label="prohibited"]
     classify  -> retrieve          [label="safety_critical / procedural / informational"]
     retrieve  -> failsafe_evidence [label="score < min_score"]
     retrieve  -> generate          [label="evidence found"]
     generate  -> scan
     scan      -> failsafe_scan     [label="blocked"]
-    scan      -> response          [label="passed"]
+    scan      -> quality           [label="passed"]
+    quality   -> response
 
     prohibited        -> audit
     failsafe_evidence -> audit
@@ -722,8 +737,9 @@ digraph pipeline {{
 with tab_tree:
     st.title("Pipeline Decision Tree")
     st.caption(
-        "Every query passes through five stages. "
-        "The highlighted path shows the route taken by the most recent query."
+        "Every query passes through six stages. "
+        "The highlighted path shows the route taken by the most recent query. "
+        "Dashed lines indicate the low-confidence warning path (query still proceeds)."
     )
 
     # Load last audit event for live trace
@@ -745,19 +761,22 @@ with tab_tree:
         st.markdown("#### Stage Summary")
         st.markdown("""
 **🔵 Stage 1 — Classify**
-qwen2.5vl:7b reads the query and routes it to one of four modes: safety\\_critical, procedural, informational, or prohibited. Prohibited queries are blocked immediately — no retrieval performed.
+qwen2.5vl:7b reads the query and routes it to one of four modes: safety\\_critical, procedural, informational, or prohibited. Prohibited queries are blocked immediately. If classifier confidence < 0.70, a low-confidence warning is shown in the UI — the query still proceeds.
 
 **🟢 Stage 2 — Vision-RAG Retrieve**
-Four-tier cascade: figure caption scan → VLM tree search (qwen2.5vl:7b scores each index node) → keyword + synonym expansion → full-page scan fallback. BM25 re-ranking demotes false-positive VLM hits. If no page meets min\\_score, escalates without calling the LLM.
+Four-tier cascade: Tier 0 figure caption scan → Tier 1 VLM tree search (qwen2.5vl:7b scores each index node) → Tier 2 keyword scoring with synonym expansion (YAML overlay) → Tier 3 full-page scan fallback. BM25 re-ranking demotes false-positive VLM hits. If no page meets min\\_score, escalates without calling the LLM.
 
 **🟢 Stage 3 — Generate**
-qwen2.5vl:7b synthesises an answer using ONLY the retrieved evidence — text plus rendered page images (vision). Temperature 0 for determinism. Every numbered step gets an inline (p.N) citation.
+qwen2.5vl:7b synthesises an answer using ONLY the retrieved evidence — both extracted text and rendered page images at 96 DPI (vision input). Temperature 0 for determinism. Every numbered step receives an inline (p.N) citation.
 
 **🟢 Stage 4 — Scan**
-Checks citations point to retrieved pages, enforces response length limit, and detects fail-safe patterns. Blocks if any check fails.
+Checks that every citation points to a retrieved page, enforces the 5,000-character response limit, and detects fail-safe escalation patterns. Blocks the response if any check fails.
 
-**🟣 Stage 5 — Audit**
-All decisions — query type, retrieval tier, quality scores, raw LLM output, safety scan result, and final response — are written to the immutable JSONL audit log with ISO timestamps and SHA-256 prompt hash.
+**🔵 Stage 5 — Quality Scoring**
+Four independent scores computed from the evidence and response: Retrieval (page match quality), Answer (citation and completeness), Completeness (response depth), Coverage (pages found vs. search limit). Displayed as color-coded indicators with hover tooltips.
+
+**🟣 Stage 6 — Audit**
+All decisions — query type, classifier confidence, retrieval tier, quality scores, raw LLM output, safety scan result, and final response — are written to the immutable JSONL audit log with ISO timestamps and SHA-256 prompt hash.
 """)
 
         if last_event:
@@ -778,10 +797,18 @@ All decisions — query type, retrieval tier, quality scores, raw LLM output, sa
                 "none":           "No evidence found",
             }.get(last_event.get("retrieval_type", ""), last_event.get("retrieval_type", "—"))
 
+            cc       = last_event.get("classifier_confidence", 1.0)
+            qs       = last_event.get("quality_score", {})
+            q_ret    = qs.get("retrieval", None)
+            q_ans    = qs.get("llm_quality", None)
+            q_str    = f"{q_ret:.0%} / {q_ans:.0%}" if q_ret is not None else "—"
+
             st.caption(f"**Query:** {last_event.get('query','')[:60]}…")
             st.caption(f"{icon} **Type:** {qtype}")
+            st.caption(f"**Classifier confidence:** {cc:.2f}")
             st.caption(f"**Retrieval tier:** {tier_label}")
             st.caption(f"**Pages found:** {n_pages}")
+            st.caption(f"**Quality (Ret/Ans):** {q_str}")
             st.caption(f"**Outcome:** {'⚠️ Fail-safe — ' + reason if fail else '✅ Answer returned'}")
             st.caption(f"**Duration:** {dur} ms")
 
