@@ -41,11 +41,11 @@ VLM_MODEL       = "qwen2.5vl:7b"
 # ---------------------------------------------------------------------------
 # Tuning constants
 # ---------------------------------------------------------------------------
-_MAX_CHARS_PER_SECTION      = 2000
-_MIN_PAGE_TEXT_CHARS        = 80
-_FULLTEXT_FALLBACK_THRESHOLD = 0.30
-_VLM_SEARCH_TIMEOUT         = 150   # seconds — VLM reasoning over the tree
-_SUMMARY_TRUNCATE           = 220   # chars of summary sent to VLM per node
+_MAX_CHARS_PER_SECTION      = 2000   # max text extracted per section — keeps prompt size bounded
+_MIN_PAGE_TEXT_CHARS        = 80     # skip near-blank pages (cover pages, blank leaves) in full-page scan
+_FULLTEXT_FALLBACK_THRESHOLD = 0.30  # if the best keyword score is below this, escalate to full-page scan
+_VLM_SEARCH_TIMEOUT         = 150   # seconds — VLM reasoning over the full tree can be slow on 12 GB GPU
+_SUMMARY_TRUNCATE           = 220   # chars of summary sent to VLM per node — keeps the tree JSON compact
 
 
 # ---------------------------------------------------------------------------
@@ -331,6 +331,9 @@ def _score_node(node: dict, query_tokens: list[str], extra_tokens: set | None = 
         text_hits  = sum(1 for t in query_tokens if t in extra_tokens)
         text_score = (text_hits / len(query_tokens)) * 0.5
     base        = max(title_score, text_score)
+    # Penalise wide-spanning nodes (whole chapters) in favour of narrower sections.
+    # A node covering 40 pages is less specific than one covering 2 pages for the same
+    # keyword hit count — specificity decays gently (1/1.05 per extra page).
     span        = max(1, node["end_index"] - node["start_index"] + 1)
     specificity = 1.0 / (1.0 + 0.05 * (span - 1))
     return round(base * specificity, 4)
@@ -407,6 +410,9 @@ def _keyword_search(query: str, indexes: list[dict], top_k: int, min_score: floa
 
     candidates.sort(key=lambda c: c["score"], reverse=True)
     if candidates:
+        # Relative cutoff: discard anything scoring less than 45% of the top result.
+        # This removes obviously off-topic results while keeping near-ties (cross-document
+        # queries where two sections are both relevant at similar scores).
         cutoff     = candidates[0]["score"] * 0.45
         candidates = [c for c in candidates if c["score"] >= cutoff]
     return candidates[:top_k]
@@ -498,7 +504,10 @@ def _figure_reference_search(query: str, top_k: int) -> list[dict]:
 # BM25 re-ranker (VLM results only — Task C)
 # ---------------------------------------------------------------------------
 
-BM25_MIN_SCORE = 0.10  # normalised threshold below which VLM nodes are downgraded
+# Normalised BM25 threshold: VLM nodes whose text scores below this fraction of
+# the top BM25 result are downgraded by 0.15.  Set low (0.10) to only penalise
+# clear misses — VLM results that have near-zero keyword overlap with the query.
+BM25_MIN_SCORE = 0.10
 
 
 def _bm25_rerank(query: str, results: list[dict]) -> list[dict]:
@@ -607,6 +616,9 @@ def pageindex_search(query: str, top_k: int, min_score: float) -> tuple[list[dic
             start     = node["start_index"]
             end       = node["end_index"]
             text      = _extract_text(pdf_path, start, end) if pdf_path else f"[PDF not found: {doc_name}]"
+            # Assign decaying confidence scores based on the VLM's rank order.
+            # Rank 0 = 0.95, rank 1 = 0.87, …, floor at 0.40 so all VLM results
+            # remain above the default min_score (0.15) and reach the generator.
             score     = round(max(0.95 - rank * 0.08, 0.40), 4)
 
             results.append({

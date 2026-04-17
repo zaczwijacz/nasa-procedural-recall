@@ -2,9 +2,18 @@
 NASA Procedural Recall Assistant — Streamlit UI
 
 Tabs:
-  📚 Documents  — upload PDFs and trigger index builds
-  💬 Query      — chat interface with side-by-side source page rendering
-  📋 Audit Log  — full structured log of every query and safety decision
+  📚 Documents     — upload PDFs, trigger PageIndex builds, inspect index status
+  💬 Query         — chat interface: classify → retrieve → generate → scan → display
+                     answers include inline (p.N) citations as clickable PDF links
+                     and four per-response quality scores (Retrieval, Answer,
+                     Completeness, Coverage)
+  📋 Audit Log     — full JSONL record of every query, safety decision, and score
+  🌲 Decision Tree — live Graphviz diagram of the six-stage pipeline; highlights
+                     the path taken by the most recent query
+  📑 Document Tree — browsable TOC hierarchy for each indexed document
+
+All inference runs locally via Ollama (qwen2.5vl:7b).  No network calls are made
+during query processing.
 """
 
 import datetime
@@ -238,9 +247,11 @@ def render_result(msg: dict) -> None:
         st.caption(f"{icon} **{qtype}** · {ts}")
 
         if quality:
+            # Color thresholds: ≥70% green, 40–69% amber, <40% red
             def _dot(v: float) -> str:
                 return "🟢" if v >= 0.70 else ("🟡" if v >= 0.40 else "🔴")
 
+            # Renders one metric as: <dot> <Label> <ℹ hover tooltip> <value%>
             def _tip(label: str, tooltip: str, value: str) -> str:
                 return (
                     f'{_dot(float(value.strip("%")) / 100)} {label} '

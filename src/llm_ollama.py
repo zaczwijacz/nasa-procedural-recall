@@ -1,10 +1,28 @@
+"""
+Ollama LLM/VLM wrapper for the NASA Procedural Recall Assistant.
+
+Provides two public interfaces:
+  - render_page_b64()  — renders a PDF page to a base64 JPEG for vision input
+  - ollama_generate()  — calls Ollama /api/chat and returns the model's reply
+
+The same model (qwen2.5vl:7b) handles all three inference roles in the pipeline:
+query classification, VLM tree search, and answer generation.  Using one model
+avoids managing multiple Ollama instances and keeps VRAM usage predictable.
+"""
+
 import base64
 import requests
 from pathlib import Path
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL   = "qwen2.5vl:7b"
+DEFAULT_MODEL   = "qwen2.5vl:7b"   # Qwen2.5 Vision-Language — handles text AND page images
 
+# ---------------------------------------------------------------------------
+# System prompt — injected into every answer-generation call.
+# This is the primary guardrail preventing the model from hallucinating
+# information not present in the retrieved evidence.  The "ONLY" constraint
+# and the exact failsafe phrasing are checked downstream by safety_scan.py.
+# ---------------------------------------------------------------------------
 _SYSTEM = (
     "You are a NASA procedural reference assistant. Crew members rely on you for accurate, "
     "clear answers drawn directly from official NASA documentation.\n\n"
@@ -26,14 +44,18 @@ _SYSTEM = (
 
 
 def render_page_b64(pdf_path, page_num: int, dpi: int = 96) -> str:
-    """Render a single PDF page (1-based) to a base64-encoded JPEG for VLM input.
-    JPEG is used (not PNG) to keep payload size small enough for local Ollama."""
+    """
+    Render a single PDF page (1-based index) to a base64-encoded JPEG for VLM input.
+
+    DPI of 96 balances readability for the VLM against payload size — higher DPI
+    causes Ollama 500 errors on the local 12 GB GPU.  JPEG at quality 75 is used
+    instead of PNG because it is ~4-8x smaller with negligible quality loss for text.
+    """
     import pymupdf
     doc  = pymupdf.open(str(pdf_path))
-    page = doc[page_num - 1]
-    mat  = pymupdf.Matrix(dpi / 72, dpi / 72)
+    page = doc[page_num - 1]           # pymupdf pages are 0-indexed
+    mat  = pymupdf.Matrix(dpi / 72, dpi / 72)   # 72 pt/inch is the PDF default
     pix  = page.get_pixmap(matrix=mat)
-    # Convert to JPEG at quality 75 — readable by VLM, ~4-8x smaller than PNG
     img_bytes = pix.tobytes("jpeg", jpg_quality=75)
     doc.close()
     return base64.b64encode(img_bytes).decode()
@@ -46,12 +68,19 @@ def ollama_generate(
     images: list[str] | None = None,
 ) -> str:
     """
-    Call Ollama chat API.  If `images` is provided (list of base64-encoded PNGs),
-    they are attached to the user message so the VLM can read page content visually.
+    Call the Ollama /api/chat endpoint and return the model's reply text.
+
+    If `images` is provided (list of base64-encoded JPEGs), they are attached to
+    the user message so the VLM can read page content visually — figures, tables,
+    and diagrams that are not captured by text extraction.
+
+    temperature=0 enforces deterministic output, which is essential for a
+    safety-critical assistant where the same query should always produce the
+    same answer.  num_predict=2048 caps response length to avoid runaway generation.
     """
     user_msg: dict = {"role": "user", "content": prompt}
     if images:
-        user_msg["images"] = images
+        user_msg["images"] = images   # Ollama multimodal: attach page images to the message
 
     r = requests.post(
         f"{OLLAMA_BASE_URL}/api/chat",
@@ -67,8 +96,9 @@ def ollama_generate(
         timeout=timeout,
     )
     if r.status_code == 500:
-        # Ollama 500 usually means the image payload was too large or the model
-        # context was exceeded.  Return empty so the caller can retry without images.
+        # Ollama 500 usually means the image payload was too large for the
+        # model context window.  Return empty so agent_test.py can retry
+        # with fewer or no images rather than surfacing a hard error.
         return ""
     r.raise_for_status()
     return r.json()["message"]["content"]
