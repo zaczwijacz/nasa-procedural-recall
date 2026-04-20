@@ -35,7 +35,7 @@ INDEX_DIR = ROOT / "indexes"
 PDF_DIR   = ROOT / "data" / "raw_pdfs"
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-MODEL           = "qwen2.5vl:7b"
+MODEL           = "qwen2.5vl:7b"   # any Ollama VLM can be used; Qwen2.5-VL 7B used in this project
 
 # How many pages of the PDF to render as images for the VLM audit.
 # TOCs are almost always in the first ~20 pages.

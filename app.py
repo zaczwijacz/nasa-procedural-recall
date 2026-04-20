@@ -12,8 +12,10 @@ Tabs:
                      the path taken by the most recent query
   📑 Document Tree — browsable TOC hierarchy for each indexed document
 
-All inference runs locally via Ollama (qwen2.5vl:7b).  No network calls are made
-during query processing.
+All inference runs locally via Ollama using any compatible vision-language model
+configured in policies/policy.yaml.  This project was developed and evaluated
+using Qwen2.5-VL 7B (qwen2.5vl:7b).  No network calls are made during query
+processing.
 """
 
 import datetime
@@ -638,7 +640,13 @@ def _build_pipeline_dot(highlight: dict | None = None) -> str:
     Build a Graphviz DOT string for the query pipeline.
     If highlight is provided (from an audit log entry), the nodes along the
     actual path taken are outlined in bright white to show the live trace.
+    Model name is read from policy so the diagram stays accurate if the
+    configured model is changed.
     """
+    # Read the active model name from policy (any Ollama VLM can be configured)
+    _policy  = get_policy()
+    _model   = _policy.get("llm", {}).get("model", "qwen2.5vl:7b")
+
     # Determine which path the last query took
     h = highlight or {}
     qtype        = h.get("query_type", "")
@@ -674,8 +682,8 @@ def _build_pipeline_dot(highlight: dict | None = None) -> str:
             return ', penwidth=3, color="#FFFFFF"'
         return ""
 
-    # Classification label with actual type if known
-    classify_label = "Stage 1 — LLM Classification\\nqwen2.5vl:7b"
+    # Classification label with active model name and last query type if known
+    classify_label = f"Stage 1 — LLM Classification\\n{_model}"
     if qtype:
         classify_label += f"\\nLast query: {qtype}"
 
@@ -699,13 +707,13 @@ digraph pipeline {{
     prohibited [label="BLOCKED\\nProhibited query\\nNo retrieval performed",
                 style="filled,rounded", fillcolor="#8b0000", fontcolor="white"{hl("prohibited")}]
 
-    retrieve [label="Stage 2 — Vision-RAG Retrieval\\nTier 0: Figure caption scan\\nTier 1: VLM tree search (qwen2.5vl:7b)\\nTier 2: Keyword + synonym expansion (YAML overlay)\\nTier 3: Full-page scan (fallback)\\nBM25 re-ranking",
+    retrieve [label="Stage 2 — Vision-RAG Retrieval\\nTier 0: Figure caption scan\\nTier 1: VLM tree search ({_model})\\nTier 2: Keyword + synonym expansion (YAML overlay)\\nTier 3: Full-page scan (fallback)\\nBM25 re-ranking",
               style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("retrieve")}]
 
     failsafe_evidence [label="FAIL-SAFE\\nInsufficient evidence\\nEscalate to ground support",
                        style="filled,rounded", fillcolor="#8b0000", fontcolor="white"{hl("failsafe_evidence")}]
 
-    generate [label="Stage 3 — Answer Generation\\nqwen2.5vl:7b · Text + page images (96 DPI)\\nEvidence-only · Temp=0 · Inline (p.N) citations",
+    generate [label="Stage 3 — Answer Generation\\n{_model} · Text + page images (96 DPI)\\nEvidence-only · Temp=0 · Inline (p.N) citations",
               style="filled,rounded", fillcolor="#1a6b3a", fontcolor="white"{hl("generate")}]
 
     scan [label="Stage 4 — Safety Scan\\nCitation hit check · Length check\\nFail-safe pattern detection",
@@ -772,13 +780,13 @@ with tab_tree:
         st.markdown("#### Stage Summary")
         st.markdown("""
 **🔵 Stage 1 — Classify**
-qwen2.5vl:7b reads the query and routes it to one of four modes: safety\\_critical, procedural, informational, or prohibited. Prohibited queries are blocked immediately. If classifier confidence < 0.70, a low-confidence warning is shown in the UI — the query still proceeds.
+The configured VLM reads the query and routes it to one of four modes: safety\\_critical, procedural, informational, or prohibited. Prohibited queries are blocked immediately. If classifier confidence < 0.70, a low-confidence warning is shown in the UI — the query still proceeds. *(This project used Qwen2.5-VL 7B.)*
 
 **🟢 Stage 2 — Vision-RAG Retrieve**
-Four-tier cascade: Tier 0 figure caption scan → Tier 1 VLM tree search (qwen2.5vl:7b scores each index node) → Tier 2 keyword scoring with synonym expansion (YAML overlay) → Tier 3 full-page scan fallback. BM25 re-ranking demotes false-positive VLM hits. If no page meets min\\_score, escalates without calling the LLM.
+Four-tier cascade: Tier 0 figure caption scan → Tier 1 VLM tree search (VLM scores each index node) → Tier 2 keyword scoring with synonym expansion (YAML overlay) → Tier 3 full-page scan fallback. BM25 re-ranking demotes false-positive VLM hits. If no page meets min\\_score, escalates without calling the LLM. *(This project used Qwen2.5-VL 7B.)*
 
 **🟢 Stage 3 — Generate**
-qwen2.5vl:7b synthesises an answer using ONLY the retrieved evidence — both extracted text and rendered page images at 96 DPI (vision input). Temperature 0 for determinism. Every numbered step receives an inline (p.N) citation.
+The configured VLM synthesises an answer using ONLY the retrieved evidence — both extracted text and rendered page images at 96 DPI (vision input). Temperature 0 for determinism. Every numbered step receives an inline (p.N) citation. *(This project used Qwen2.5-VL 7B.)*
 
 **🟢 Stage 4 — Scan**
 Checks that every citation points to a retrieved page, enforces the 5,000-character response limit, and detects fail-safe escalation patterns. Blocks the response if any check fails.

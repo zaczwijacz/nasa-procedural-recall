@@ -5,8 +5,11 @@ Provides two public interfaces:
   - render_page_b64()  — renders a PDF page to a base64 JPEG for vision input
   - ollama_generate()  — calls Ollama /api/chat and returns the model's reply
 
-The same model (qwen2.5vl:7b) handles all three inference roles in the pipeline:
-query classification, VLM tree search, and answer generation.  Using one model
+The active model is read from policies/policy.yaml at runtime.  Any
+Ollama-compatible vision-language model can be used by changing the model name
+there.  This project was developed and evaluated using Qwen2.5-VL 7B
+(qwen2.5vl:7b).  The same model handles all three inference roles: query
+classification, VLM tree search, and answer generation — using one model
 avoids managing multiple Ollama instances and keeps VRAM usage predictable.
 """
 
@@ -15,7 +18,7 @@ import requests
 from pathlib import Path
 
 OLLAMA_BASE_URL = "http://localhost:11434"
-DEFAULT_MODEL   = "qwen2.5vl:7b"   # Qwen2.5 Vision-Language — handles text AND page images
+DEFAULT_MODEL   = "qwen2.5vl:7b"   # default; overridden by policy.yaml at runtime
 
 # ---------------------------------------------------------------------------
 # System prompt — injected into every answer-generation call.

@@ -17,7 +17,7 @@ import re
 import requests
 from typing import Tuple
 
-from llm_ollama import OLLAMA_BASE_URL, DEFAULT_MODEL  # DEFAULT_MODEL = qwen2.5vl:7b
+from llm_ollama import OLLAMA_BASE_URL, DEFAULT_MODEL  # configurable; qwen2.5vl:7b used in this project
 
 # ---------------------------------------------------------------------------
 # LLM classifier

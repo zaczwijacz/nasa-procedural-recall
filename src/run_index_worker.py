@@ -78,7 +78,7 @@ def main() -> None:
                 str(PAGEINDEX_DIR / "run_pageindex.py"),
                 "--pdf_path",           str(pdf_path),
                 "--toc-check-pages",    "3",
-                "--model",              "qwen2.5vl:7b",
+                "--model",              "qwen2.5vl:7b",   # any Ollama VLM; Qwen2.5-VL 7B used in this project
                 "--max-pages-per-node", "3",
             ],
             cwd=str(PAGEINDEX_DIR),

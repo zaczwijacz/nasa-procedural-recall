@@ -1,15 +1,23 @@
 policy_version: "0.1.0"
 system_name: "procedural-recall-assistant"
 
+# ---------------------------------------------------------------------------
+# Model configuration
+# Any Ollama-compatible vision-language model can be used by changing the
+# model names below.  This project was developed and evaluated using
+# Qwen2.5-VL 7B (qwen2.5vl:7b).  The same model is used for all inference
+# roles: query classification, VLM tree search, and answer generation.
+# ---------------------------------------------------------------------------
+
 llm:
   provider: "ollama"
   base_url: "http://localhost:11434"
-  model: "qwen2.5vl:7b"
+  model: "qwen2.5vl:7b"          # LLM used for answer generation
   temperature: 0.0
   timeout_seconds: 420
 
 vlm:
-  model: "qwen2.5vl:7b"
+  model: "qwen2.5vl:7b"          # VLM used for tree search and page image reasoning
   render_dpi: 96
   max_images_per_query: 3
   enabled: true

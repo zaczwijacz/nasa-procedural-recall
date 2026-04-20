@@ -9,7 +9,7 @@ A locally-hosted **Vision-RAG** system for querying NASA flight crew procedural 
 ## Features
 
 - **Vision-RAG pipeline** — four-tier retrieval cascade: figure caption scan → VLM tree search → keyword scoring → full-page scan, each grounded in indexed document structure
-- **Vision-Language Model** — powered by **Qwen2.5-VL 7B** (`qwen2.5vl:7b`) running entirely on-device via Ollama; handles both text and embedded page images
+- **Model-agnostic** — runs with any Ollama-compatible vision-language model; this project was developed and evaluated using **Qwen2.5-VL 7B** (`qwen2.5vl:7b`). Change the model in `policies/policy.yaml` to use any other Ollama VLM.
 - **BM25 re-ranking** — post-VLM re-ranking demotes false-positive retrievals before generation
 - **Synonym expansion** — hardcoded medical/aerospace synonym clusters merged with a user-editable `data/synonyms.yaml` overlay at import time
 - **Query classification** — routes each query to `safety_critical`, `procedural`, `informational`, or `prohibited` before retrieval, adjusting response rigour accordingly
@@ -29,7 +29,7 @@ User Query
   │
   └─ retrieve_pageindex.py  Four-tier Vision-RAG cascade:
        Tier 0  Figure caption scan   — deterministic match on "Figure N" / "Table N" patterns
-       Tier 1  VLM tree search       — qwen2.5vl:7b scores each index node summary against the query
+       Tier 1  VLM tree search       — configured VLM scores each index node summary against the query
        Tier 2  Keyword scoring       — synonym-expanded token overlap over all node summaries
        Tier 3  Full-page scan        — fallback: raw text search across all indexed page content
                ↓
@@ -37,7 +37,7 @@ User Query
                ↓
   ├─ Fail-safe gate          if no page meets min_score → escalation response, no LLM call
   │
-  ├─ llm_ollama.py           qwen2.5vl:7b via Ollama /api/chat
+  ├─ llm_ollama.py           configured VLM via Ollama /api/chat
   │                          page images rendered at 96 DPI and attached as vision payload
   │                          evidence-only system prompt with inline (p.N) citation instruction
   │
@@ -53,16 +53,20 @@ User Query
 
 ## Models
 
-| Purpose | Model | Backend | Notes |
-|---|---|---|---|
-| Query classification | `qwen2.5vl:7b` | Ollama | Classifies intent before retrieval |
-| VLM tree search (Tier 1) | `qwen2.5vl:7b` | Ollama | Scores index node summaries against query |
-| Answer generation | `qwen2.5vl:7b` | Ollama | Text + page image (vision) input |
-| PDF indexing | `qwen2.5vl-10k` | Ollama | Custom Modelfile: `num_ctx 10240, num_predict 8192` |
+Any Ollama-compatible vision-language model can be used. Set the model name in `policies/policy.yaml` under `llm.model` and `vlm.model`. **This project was developed and evaluated using Qwen2.5-VL 7B (`qwen2.5vl:7b`).**
 
-All inference uses a single unified model: **Qwen2.5-VL 7B Instruct** — a multimodal vision-language model from Alibaba DAMO Academy that handles text, structured JSON output, and page-image understanding in one pass.
+| Purpose | Model used in this project | Backend | Notes |
+|---|---|---|---|
+| Query classification | `qwen2.5vl:7b` | Ollama | Any Ollama VLM can be substituted |
+| VLM tree search (Tier 1) | `qwen2.5vl:7b` | Ollama | Any Ollama VLM can be substituted |
+| Answer generation | `qwen2.5vl:7b` | Ollama | Any Ollama VLM with vision support |
+| PDF indexing | `qwen2.5vl-10k` | Ollama | Custom Modelfile: extended context window |
+
+The same model is used for all inference roles (classification, retrieval reasoning, generation), keeping VRAM usage predictable on a single local GPU.
 
 ### Creating the high-context indexing model
+
+The indexing step requires a larger context window than the default. Create a custom Ollama variant:
 
 ```bash
 ollama create qwen2.5vl-10k -f - <<'EOF'
@@ -72,12 +76,14 @@ PARAMETER num_predict 8192
 EOF
 ```
 
+> To use a different base model, replace `qwen2.5vl:7b` with your chosen Ollama model tag.
+
 ---
 
 ## Requirements
 
 - Python 3.11+
-- [Ollama](https://ollama.com/) running locally with `qwen2.5vl:7b` pulled
+- [Ollama](https://ollama.com/) running locally with your chosen VLM pulled
 - [PageIndex](https://github.com/VectifyAI/PageIndex) — see Credits below
 
 ---
@@ -89,10 +95,11 @@ EOF
 pip install uv
 uv sync
 
-# 2. Pull the vision-language model
+# 2. Pull a vision-language model
+#    This project used Qwen2.5-VL 7B — any compatible Ollama VLM can be used instead
 ollama pull qwen2.5vl:7b
 
-# 3. Create the high-context indexing variant
+# 3. Create the high-context indexing variant (adjust FROM if using a different model)
 ollama create qwen2.5vl-10k -f - <<'EOF'
 FROM qwen2.5vl:7b
 PARAMETER num_ctx 10240
@@ -103,7 +110,9 @@ EOF
 git clone https://github.com/VectifyAI/PageIndex C:/Users/<you>/Documents/PageIndex
 pip install -r C:/Users/<you>/Documents/PageIndex/requirements.txt
 
-# 5. Launch the Streamlit app
+# 5. (Optional) Change the model in policies/policy.yaml if using a different VLM
+
+# 6. Launch the Streamlit app
 uv run streamlit run app.py
 ```
 
@@ -159,7 +168,7 @@ nasa-procedural-recall/
 ├── app.py                     Streamlit UI (query, documents, audit, document tree tabs)
 ├── pyproject.toml
 ├── policies/
-│   └── policy.yaml            Governance config (model, retrieval thresholds, safety constraints)
+│   └── policy.yaml            Governance config (model name, retrieval thresholds, safety constraints)
 ├── data/
 │   ├── raw_pdfs/              Place source PDFs here (not tracked in git)
 │   ├── synonyms.yaml          User-editable synonym overlay (merged with hardcoded clusters)
@@ -215,9 +224,9 @@ PageIndex constructs hierarchical tree indexes from PDF documents using a vision
 }
 ```
 
-### Qwen2.5-VL
+### Qwen2.5-VL (used in this project)
 
-Inference is powered by **[Qwen2.5-VL](https://github.com/QwenLM/Qwen2.5-VL)** from Alibaba DAMO Academy, served locally via [Ollama](https://ollama.com/).
+This project was developed and evaluated using **[Qwen2.5-VL 7B](https://github.com/QwenLM/Qwen2.5-VL)** from Alibaba DAMO Academy, served locally via [Ollama](https://ollama.com/). Any Ollama-compatible vision-language model can be substituted by updating `policies/policy.yaml`.
 
 ---
 

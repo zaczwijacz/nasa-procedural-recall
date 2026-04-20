@@ -4,11 +4,14 @@ Vision-RAG retriever for the NASA procedural recall assistant.
 Pipeline (mirrors the PageIndex Vision RAG notebook):
   1. Load pre-built PageIndex tree JSONs from indexes/.
   2. Build a compact tree (node_id, title, pages, summary) for all documents.
-  3. Send the compact tree + query to Qwen2.5-VL-7B, which REASONS over the
-     tree and returns the most relevant node IDs (JSON).
+  3. Send the compact tree + query to the configured VLM (see VLM_MODEL below),
+     which REASONS over the tree and returns the most relevant node IDs (JSON).
   4. Resolve those node IDs to PDF page ranges.
   5. Extract page text AND render page images (JPEG) from the source PDFs.
   6. Return results in the agent's retrieval contract format.
+
+Any Ollama-compatible vision-language model can be used by changing VLM_MODEL.
+This project was developed and evaluated using Qwen2.5-VL 7B (qwen2.5vl:7b).
 
 Fallback chain:
   Figure/table caption scan  →  VLM tree reasoning  →  keyword scoring  →  full-page RAG scan
@@ -36,6 +39,7 @@ PDF_DIR       = _ROOT / "data" / "raw_pdfs"
 _SYNONYMS_PATH = _ROOT / "data" / "synonyms.yaml"
 
 OLLAMA_BASE_URL = "http://localhost:11434"
+# Any Ollama VLM can be substituted here.  Qwen2.5-VL 7B was used for this project.
 VLM_MODEL       = "qwen2.5vl:7b"
 
 # ---------------------------------------------------------------------------
@@ -113,7 +117,8 @@ def _build_vlm_tree(indexes: list[dict]) -> str:
 
 def _vlm_tree_search(query: str, indexes: list[dict], top_k: int) -> list[dict] | None:
     """
-    Ask Qwen2.5-VL to reason over the document tree and return relevant nodes.
+    Ask the configured VLM (default: Qwen2.5-VL 7B) to reason over the document
+    tree and return relevant nodes.
     Returns a list of {"node_id", "doc_name"} dicts, or None on failure.
     """
     tree_json = _build_vlm_tree(indexes)
@@ -550,8 +555,9 @@ def pageindex_search(query: str, top_k: int, min_score: float) -> tuple[list[dic
     """
     Search all indexed documents for sections relevant to `query`.
 
-    Primary path: VLM tree reasoning (Qwen2.5-VL reads the full document
-    index and reasons about which nodes answer the query).
+    Primary path: VLM tree reasoning (the configured VLM reads the full document
+    index and reasons about which nodes answer the query; Qwen2.5-VL 7B was used
+    for this project).
 
     Fallback: keyword scoring + full-page RAG scan.
 
